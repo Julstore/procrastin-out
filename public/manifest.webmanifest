@@ -1,0 +1,19 @@
+{
+  "name": "procrastin-out — vence la procrastinación",
+  "short_name": "procrastin-out",
+  "description": "Tareas, hábitos, salud y logros con semáforo de ambiente.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#f3eee3",
+  "theme_color": "#e2482e",
+  "icons": [
+    {
+      "src": "icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

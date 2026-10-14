@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>procrastin-out — vence la procrastinación</title>
+<meta name="theme-color" content="#e2482e">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="procrastin-out">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" type="image/svg+xml" href="icon.svg">
+<link rel="apple-touch-icon" href="icon.svg">
+<link rel="stylesheet" href="style.css">
+</head>
+<body data-tab="tasks">
+  <div class="bg-orbs" aria-hidden="true"><span></span><span></span><span></span></div>
+  <div class="app-shell">
+    <header class="topbar">
+      <div class="brand">
+        <div class="brand-mark" aria-hidden="true">🥊</div>
+        <div class="brand-text">
+          <h1>procrastin-out</h1>
+          <div class="brand-sub">vence la procrastinación</div>
+        </div>
+      </div>
+      <div class="status-cluster">
+        <div class="prog-badge" id="progPill" title="Progreso general: tareas + hábitos + compromisos">
+          <span id="moodLabel" title="Ambiente según lo pendiente">🔴</span>
+          <span id="progPct">0%</span>
+          <div class="prog-wrap"><div id="progFill" style="width:0%"></div></div>
+        </div>
+        <span class="lvl-chip" id="lvlChip" title="Tu nivel y racha actual">⭐ Nv 1</span>
+        <button id="themeToggle" title="Modo claro/oscuro" aria-label="Cambiar entre modo claro y oscuro">🌙</button>
+      </div>
+    </header>
+
+    <nav class="tabs" role="tablist" aria-label="Secciones de procrastin-out">
+      <button data-tab="tasks" class="active" role="tab">✅ Tareas</button>
+      <button data-tab="habits" role="tab">🔥 Hábitos</button>
+      <button data-tab="health" role="tab">🩺 Salud</button>
+      <button data-tab="meals" role="tab">🍎 Alimentación</button>
+      <button data-tab="commitments" role="tab">🤝 Compromisos</button>
+      <button data-tab="finances" role="tab">💸 Finanzas</button>
+      <button data-tab="learning" role="tab">📚 Aprendizaje</button>
+      <button data-tab="projects" role="tab">🚀 Proyectos</button>
+      <button data-tab="news" role="tab">📰 Noticias</button>
+      <button data-tab="rewards" role="tab">🏆 Logros</button>
+    </nav>
+
+    <main id="app" class="stage"></main>
+
+    <footer class="dock">
+      <button id="phoneBtn" onclick="openPhoneModal()">📱 Celular</button>
+      <button id="exportBtn">⬇️ Exportar datos</button>
+      <button id="pinBtn" title="Cambiar PIN">🔑 PIN</button>
+      <button id="lockBtn" title="Bloquear la app">🔒 Bloquear</button>
+      <span id="saveState"></span>
+    </footer>
+
+    <div id="phoneModal" class="phone-modal" hidden>
+      <div class="phone-modal-back" onclick="closePhoneModal()"></div>
+      <div class="card phone-modal-card">
+        <div class="row" style="justify-content:space-between">
+          <strong>📱 Usar en el celular</strong>
+          <button class="icon-btn" onclick="closePhoneModal()" aria-label="Cerrar">✕</button>
+        </div>
+        <div id="phoneUrls"><p class="meta">Buscando la dirección de tu PC…</p></div>
+      </div>
+    </div>
+
+    <div id="flyingXp"></div>
+  </div>
+
+  <!--APP_JS-->
+</body>
+</html>

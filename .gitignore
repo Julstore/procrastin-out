@@ -1,0 +1,7 @@
+node_modules/
+dist/
+*.log
+# Datos personales + secretos: NUNCA subir a GitHub
+# (la nube usa Postgres vía DATABASE_URL, no estos archivos)
+data/
+.env

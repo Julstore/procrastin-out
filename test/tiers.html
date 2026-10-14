@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<title>Evolución del héroe — prueba</title>
+<style>
+  body { background: #2b3140; color: #eee; font-family: system-ui; padding: 20px; }
+  .tier { display: inline-block; margin: 10px; padding: 14px; background: #384053; border-radius: 12px; text-align: center; vertical-align: top; }
+  .tier h4 { margin: 6px 0 0; font-size: 13px; }
+</style>
+</head>
+<body>
+<h1>Evolución del héroe</h1>
+<div id="tiers"></div>
+<script src="../public/hero.js"></script>
+<script>
+  const box = document.getElementById('tiers');
+  for (const lv of [1, 3, 5, 6, 8, 10, 12, 15, 20]) {
+    const d = document.createElement('div');
+    d.className = 'tier';
+    d.innerHTML = heroAvatarSvg(lv, 150) + `<h4>Nivel ${lv}</h4>`;
+    box.appendChild(d);
+  }
+</script>
+</body>
+</html>

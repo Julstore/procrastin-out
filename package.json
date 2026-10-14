@@ -1,0 +1,45 @@
+{
+  "name": "procrastin-out",
+  "productName": "procrastin-out",
+  "version": "1.0.0",
+  "description": "Vence la procrastinación — app de escritorio (tareas, hábitos, salud, noticias y logros)",
+  "main": "electron/main.js",
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "start": "electron .",
+    "server": "node server.js",
+    "cloud": "node server.js",
+    "migrate": "node scripts/push-to-cloud.mjs",
+    "dist": "electron-builder --win nsis"
+  },
+  "dependencies": {
+    "pg": "^8.23.1"
+  },
+  "build": {
+    "appId": "com.procrastinout.app",
+    "productName": "procrastin-out",
+    "asar": false,
+    "files": [
+      "server.js",
+      "public/**/*",
+      "electron/**/*",
+      "package.json"
+    ],
+    "win": {
+      "target": [
+        "nsis"
+      ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "shortcutName": "procrastin-out"
+    }
+  },
+  "devDependencies": {
+    "electron": "^44.7.2",
+    "electron-builder": "^26.15.3"
+  }
+}

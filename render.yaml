@@ -1,0 +1,22 @@
+# procrastin-out en la nube (plan gratis)
+# Render → New → Blueprint → selecciona este repo. Después carga tus datos con:
+#   $env:DATABASE_URL="<tu Neon>"; npm run migrate
+services:
+  - type: web
+    name: procrastin-out
+    runtime: node
+    plan: free
+    buildCommand: npm install
+    startCommand: node server.js
+    healthCheckPath: /login.html
+    envVars:
+      - key: NODE_VERSION
+        value: ~20
+      - key: DATABASE_URL
+        sync: false
+      - key: OPENLLM_API_KEY
+        sync: false
+      - key: LLM_MODEL
+        value: plus
+      - key: PUBLIC_URL
+        sync: false
