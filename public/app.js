@@ -260,8 +260,6 @@ function habitWeekDays(offset) {
 
 // ---------- Render ----------
 function render() {
-  $$('#saveState').length; // no-op
-  $$('.card, section').forEach(() => {}); // no-op
   document.body.dataset.tab = tab;
   const app = $('#app');
   const views = { tasks: viewTasks, habits: viewHabits, health: viewHealth, meals: viewMeals, commitments: viewCommitments, finances: viewFinances, learning: viewLearning, projects: viewProjects, news: viewNews, rewards: viewRewards };
@@ -325,7 +323,7 @@ function viewTasks() {
   `;
 }
 window.addTask = async function () {
-  const title = $('#t-title').value.trim();
+  const title = $('#t-title').value.trim().slice(0, 200);
   if (!title) return;
   await addItem('tasks', { title, due: $('#t-due').value || null, priority: $('#t-prio').value, area: $('#t-area').value, done: false });
 };
@@ -347,7 +345,7 @@ function viewHabits() {
     return `
       <div class="card">
         <div class="habit-row">
-          <div class="habit-name">${h.emoji || ''} ${esc(h.name)}
+          <div class="habit-name">${esc(h.emoji || '')} ${esc(h.name)}
             <span class="streak">🔥${streak} · ${wk}/${h.targetPerWeek}</span>
           </div>
           <div class="cal">${cells}</div>
@@ -396,13 +394,14 @@ const EX_MERGED = ({
 var viewHealth = function () {
   const latest = D.measurements.slice().sort((a, b) => b.date.localeCompare(a.date))[0];
   const w = latest?.weight;
+  const todayW = D.measurements.filter(m => m.date === today() && m.weight != null).map(m => m.weight).pop();
   const appts = D.appointments.filter(a => !a.done).sort((a, b) => (a.date + (a.time || '')).localeCompare(b.date + (b.time || '')));
   const routine = D.routine || {};
   return `
     <h2>🩺 Salud</h2>
     <div class="stats-grid">
       <div class="stat-card"><div class="num">${w ? w + ' kg' : '—'}</div><div class="lbl">Último peso</div></div>
-      <div class="stat-card"><div class="num">${D.measurements.filter(m => m.date === today() && m.weight).length ? latest.weight + ' kg' : '—'}</div><div class="lbl">Peso hoy</div></div>
+      <div class="stat-card"><div class="num">${todayW != null ? todayW + ' kg' : '—'}</div><div class="lbl">Peso hoy</div></div>
     </div>
 
     <h3>🏋️ Rutina de ejercicios</h3>
@@ -529,8 +528,10 @@ window.progressRoutine = async function () {
 window.saveMeasurement = async function () {
   const dateVal = $('#m-date').value || today();
   const weight = $('#m-weight').value ? parseFloat($('#m-weight').value) : null;
-  if (!weight) return;
-  D.measurements.push({ id: uid(), date: dateVal, weight });
+  if (!(weight > 0)) return;
+  const ix = D.measurements.findIndex(m => m.date === dateVal);
+  if (ix >= 0) D.measurements[ix] = { ...D.measurements[ix], weight };
+  else D.measurements.push({ id: uid(), date: dateVal, weight });
   await fetch('/api/data', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ measurements: D.measurements }) });
   await reload();
 };
@@ -794,11 +795,10 @@ window.addCommit = async function () {
 // ---------- Finanzas ----------
 function viewFinances() {
   const f = D.finances;
-  const spent = f.expenses.reduce((s, e) => s + e.amount, 0);
-  const pct = f.monthlyBudget > 0 ? Math.min(100, Math.round(monthSpent / f.monthlyBudget * 100)) : 0;
   const month = today().slice(0, 7);
-  const monthExpenses = f.expenses.filter(e => e.date.startsWith(month));
-  const monthSpent = monthExpenses.reduce((s, e) => s + e.amount, 0);
+  const monthExpenses = (f.expenses || []).filter(e => e.date && e.date.startsWith(month));
+  const monthSpent = monthExpenses.reduce((s, e) => s + (+e.amount || 0), 0);
+  const pct = f.monthlyBudget > 0 ? Math.min(100, Math.round(monthSpent / f.monthlyBudget * 100)) : 0;
   const byCat = {};
   for (const e of monthExpenses) byCat[e.category] = (byCat[e.category] || 0) + e.amount;
   const catEntries = Object.entries(byCat).sort((a, b) => b[1] - a[1]);
@@ -853,7 +853,7 @@ window.setBudget = async function () {
 };
 window.addExpense = async function () {
   const amount = parseFloat($('#e-amount').value);
-  if (!amount) return;
+  if (!(amount > 0)) return;
   D.finances.expenses.push({ id: uid(), date: $('#e-date').value || today(), category: $('#e-cat').value, description: $('#e-desc').value.trim(), amount });
   await fetch('/api/data', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ finances: D.finances }) });
   await reload();
@@ -955,16 +955,21 @@ function beep() {
 }
 window.pomoToggle = function () {
   if (!D.learning.length) return;
-  if (pomo.running) { pomo.running = false; clearInterval(pomo.timer); render(); return; }
+  if (pomo.running) { // pausar: congela lo que queda según el reloj real
+    pomo.secs = Math.max(0, Math.round(((pomo.endAt || Date.now()) - Date.now()) / 1000));
+    pomo.running = false; clearInterval(pomo.timer); pomo.endAt = null; render(); return;
+  }
   const sel = $('#pomo-item'); if (sel) pomo.itemId = sel.value;
   if (pomo.secs <= 0) pomo.secs = POMO_LEN[pomo.mode];
+  pomo.endAt = Date.now() + pomo.secs * 1000;
   pomo.running = true;
   clearInterval(pomo.timer);
-  pomo.timer = setInterval(pomoTick, 1000);
+  pomo.timer = setInterval(pomoTick, 500);
   render();
 };
 function pomoTick() {
-  pomo.secs--;
+  // reloj real: no se atrasa aunque la pestaña esté en segundo plano
+  pomo.secs = Math.max(0, Math.round((pomo.endAt - Date.now()) / 1000));
   const el = $('#pomoTime');
   if (el) el.textContent = fmtClock(pomo.secs);
   if (pomo.secs <= 0) pomoFinish();
@@ -984,8 +989,8 @@ async function pomoFinish() {
   } else { pomo.mode = 'focus'; pomo.secs = POMO_LEN.focus; }
   render();
 }
-window.pomoReset = function () { clearInterval(pomo.timer); pomo.running = false; pomo.secs = POMO_LEN[pomo.mode]; render(); };
-window.pomoMode = function (m) { clearInterval(pomo.timer); pomo.running = false; pomo.mode = m; pomo.secs = POMO_LEN[m]; render(); };
+window.pomoReset = function () { clearInterval(pomo.timer); pomo.running = false; pomo.endAt = null; pomo.secs = POMO_LEN[pomo.mode]; render(); };
+window.pomoMode = function (m) { clearInterval(pomo.timer); pomo.running = false; pomo.endAt = null; pomo.mode = m; pomo.secs = POMO_LEN[m]; render(); };
 window.addLearn = async function () {
   const title = $('#l-title').value.trim();
   if (!title) return;
@@ -1036,8 +1041,10 @@ window.addProject = async function () {
 };
 window.toggleStep = async function (cb) {
   const li = cb.closest('li');
+  if (!li) return;
   const pid = li.dataset.pid, idx = +li.dataset.sidx;
   const p = D.projects.find(x => x.id === pid);
+  if (!p || !p.steps || !p.steps[idx]) return;
   p.steps[idx].done = cb.checked;
   await fetch('/api/data', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ projects: D.projects }) });
   await reload();
@@ -1046,6 +1053,8 @@ window.addStep = async function (input, pid) {
   const text = input.value.trim();
   if (!text) return;
   const p = D.projects.find(x => x.id === pid);
+  if (!p) return;
+  p.steps = p.steps || [];
   p.steps.push({ text, done: false });
   await fetch('/api/data', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ projects: D.projects }) });
   await reload();
@@ -1086,7 +1095,7 @@ window.digestBrief = async function () {
   out.hidden = false; out.className = 'ai-out loading'; out.textContent = '🧠 Resumiendo tus titulares... (1-3 min)';
   try {
     const r = await fetchJSON('/api/ai/advise', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ kind: 'newsbrief', items }) });
-    out.className = 'ai-out'; out.textContent = r.reply || r.error || 'Sin respuesta.';
+    out.className = 'ai-out'; out.innerHTML = r.reply ? esToHtml(r.reply) : esc(r.error || 'Sin respuesta.');
   } catch (e) { out.className = 'ai-out'; out.textContent = 'Error: ' + errMsg(e); }
 };
 function digestHtml() {
@@ -1136,7 +1145,7 @@ function viewNews() {
         <button class="btn" onclick="searchNews()" ${newsLoading ? 'disabled' : ''}>${newsLoading ? 'Buscando...' : 'Buscar'}</button>
         ${newsRes?.items?.length ? '<button class="btn ghost" onclick="newsBrief()">🧠 Resumen con IA</button>' : ''}
       </div>
-      ${chips.length ? `<div class="chips-row">${chips.map(c => `<button class="chip ${c === newsQ ? 'on' : ''}" onclick="searchNewsTopic('${esc(c).replace(/'/g, "&#39;")}')">${esc(c)}</button>`).join('')}</div>`
+      ${chips.length ? `<div class="chips-row">${chips.map(c => `<button class="chip ${c === newsQ ? 'on' : ''}" onclick="searchNewsTopic(decodeURIComponent('${encodeURIComponent(c).replace(/'/g, '%27')}'))">${esc(c)}</button>`).join('')}</div>`
         : '<p class="meta">Añade aprendizajes, proyectos o intereses abajo y aparecerán aquí como temas.</p>'}
       <div id="briefOut" class="ai-out" hidden></div>
       <div id="newsOut" style="margin-top:8px">
@@ -1151,7 +1160,7 @@ function viewNews() {
         <input type="text" id="n-interest" placeholder="Ej: ciclismo, IA, cocina..." onkeydown="if(event.key==='Enter')addInterest()">
         <button class="btn" onclick="addInterest()">Añadir</button>
       </div>
-      ${(interests.length ? `<div class="chips-row">${interests.map(i => `<span class="chip on">${esc(i)} <button class="icon-btn" onclick="delInterest('${esc(i).replace(/'/g, "&#39;")}')" title="Quitar">×</button></span>`).join('')}</div>` : '<p class="meta">Sin intereses todavía.</p>')}
+      ${(interests.length ? `<div class="chips-row">${interests.map(i => `<span class="chip on">${esc(i)} <button class="icon-btn" onclick="delInterest(decodeURIComponent('${encodeURIComponent(i).replace(/'/g, '%27')}'))" title="Quitar">×</button></span>`).join('')}</div>` : '<p class="meta">Sin intereses todavía.</p>')}
     </div>
     <div class="card">
       <strong>📡 Feeds RSS que sigo</strong>
@@ -1224,10 +1233,12 @@ window.addInterest = async function () {
   if (cur.includes(v)) return;
   D.interests = [...cur, v];
   await putData({ interests: D.interests }, { silent: true });
+  render();
 };
 window.delInterest = async function (v) {
   D.interests = (D.interests || []).filter(x => x !== v);
   await putData({ interests: D.interests }, { silent: true });
+  render();
 };
 window.addFeed = async function () {
   const name = ($('#n-feed-name').value || '').trim().slice(0, 60);
@@ -1235,11 +1246,13 @@ window.addFeed = async function () {
   if (!name || !/^https?:\/\//i.test(url)) { alert('Pon un nombre y una URL válida (https://...)'); return; }
   D.newsFeeds = [...(D.newsFeeds || []), { id: uid(), name, url }];
   await putData({ newsFeeds: D.newsFeeds }, { silent: true });
+  render();
 };
 window.delFeed = async function (id) {
   if (!confirm('¿Dejar de seguir este feed?')) return;
   D.newsFeeds = (D.newsFeeds || []).filter(f => f.id !== id);
   await putData({ newsFeeds: D.newsFeeds }, { silent: true });
+  render();
 };
 window.readFeed = async function (id) {
   const f = (D.newsFeeds || []).find(x => x.id === id);
@@ -1301,7 +1314,6 @@ function bind() {
 }
 
 document.addEventListener('DOMContentLoaded', async () => {
-  $$('.themeToggle, nav button, #themeToggle').forEach(() => {}); // noop
   // Tema
   const syncThemeIcon = () => {
     const btn = $('#themeToggle');
@@ -1316,7 +1328,6 @@ document.addEventListener('DOMContentLoaded', async () => {
   syncThemeIcon();
   // Tabs
   $$('nav button').forEach(b => b.onclick = () => {
-    $$('.t-tab').forEach(() => {});
     $$('nav button').forEach(x => x.classList.remove('active'));
     b.classList.add('active');
     tab = b.dataset.tab;
@@ -1327,8 +1338,6 @@ document.addEventListener('DOMContentLoaded', async () => {
   // Bloqueo con PIN
   $('#lockBtn').onclick = async () => { await fetch('/api/auth/logout', { method: 'POST' }); location.href = '/login.html'; };
   $('#pinBtn').onclick = () => { location.href = '/login.html'; };
-  // Guardado en vivo de mediciones del día
-  document.body.addEventListener('change', e => { /* delegado por handlers inline */ });
   await reload();
   // Titulares del día: se piden al abrir la app (y se notifican una vez por día)
   updateNewsBadge();

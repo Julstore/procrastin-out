@@ -4,6 +4,7 @@ const http = require('http');
 const fs = require('fs');
 const crypto = require('crypto');
 const os = require('os');
+const dns = require('dns').promises;
 const path = require('path');
 
 // Carga de .env (clave de IA) sin dependencias externas.
@@ -187,8 +188,11 @@ function getSession(req) {
   const m = (req.headers.cookie || '').match(/(?:^|;\s*)pout_sess=([a-f0-9]{64})/);
   return m && SESSIONS.has(m[1]) ? m[1] : null;
 }
-const SESSION_COOKIE = (token) => `pout_sess=${token}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${30 * 24 * 3600}`;
-const CLEAR_COOKIE = 'pout_sess=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0';
+// Secure solo en la nube (en LAN/local el http lo rechazaría y rompería el login).
+// Se evalúa al arrancar: si agregás PUBLIC_URL después, reiniciá el servidor.
+const COOKIE_SECURE = publicBase() ? '; Secure' : '';
+const SESSION_COOKIE = (token) => `pout_sess=${token}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${30 * 24 * 3600}${COOKIE_SECURE}`;
+const CLEAR_COOKIE = `pout_sess=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0${COOKIE_SECURE}`;
 
 const COLLECTIONS = {
   tasks: data => data.tasks ?? [],
@@ -199,12 +203,15 @@ const COLLECTIONS = {
   appointments: data => data.appointments ?? [],
 };
 const MUTABLE_TOP = new Set(['meals', 'finances', 'measurements']);
+// PUT /api/data solo acepta claves conocidas. El héroe (XP/nivel/insignias) y los metadatos
+// los maneja el servidor: aceptarlos del cliente permitiría regalarse niveles.
+const PUTABLE_TOP = new Set([...Object.keys(DEFAULT_DATA), 'meds', 'routine', 'profile', 'interests', 'newsFeeds'].filter(k => !['hero', 'version', 'createdAt'].includes(k)));
 
+const SAFE_ID = /^[0-9a-zA-Z_-]{1,64}$/;
 function sanitizeItem(key, item) {
-  // sanity básico: id obligatorio
-  const out = { ...item };
-  if ('id' in out && typeof out.id === 'string' && out.id) return out;
-  out.id = uid();
+  // id obligatorio y seguro (los ids se interpolan en onclick): si viene raro, se genera uno
+  const out = (item && typeof item === 'object' && !Array.isArray(item)) ? { ...item } : {};
+  if (typeof out.id !== 'string' || !SAFE_ID.test(out.id)) out.id = uid();
   return out;
 }
 
@@ -554,10 +561,34 @@ async function fetchTimeout(url, ms = 9000, opts = {}) {
     return r;
   } finally { clearTimeout(t); }
 }
+// Anti-SSRF: /api/news/feed solo acepta hosts públicos (bloquea localhost, LAN y metadata cloud)
+async function assertPublicFeedUrl(feedUrl) {
+  let u;
+  try { u = new URL(feedUrl); } catch (_) { throw new Error('URL de feed inválida'); }
+  if (u.protocol !== 'http:' && u.protocol !== 'https:') throw new Error('URL de feed inválida');
+  if (u.username || u.password) throw new Error('URL de feed inválida');
+  let ips = [];
+  try { ips = (await dns.lookup(u.hostname, { all: true })).map(r => r.address); }
+  catch (_) { throw new Error('No se pudo resolver el feed'); }
+  const priv = (ip) => {
+    if (ip === '::1' || ip === '::' || ip === '::ffff:127.0.0.1') return true;
+    if (ip.includes(':')) { // IPv6: solo unicast global 2000::/3
+      const first = parseInt(ip.split(':')[0], 16);
+      return !(first >= 0x2000 && first < 0x4000);
+    }
+    const p = ip.split('.').map(Number);
+    if (p.length !== 4 || p.some(n => !(n >= 0 && n <= 255))) return true;
+    return p[0] === 10 || p[0] === 127 || p[0] === 0
+      || (p[0] === 172 && p[1] >= 16 && p[1] <= 31)
+      || (p[0] === 192 && p[1] === 168)
+      || (p[0] === 169 && p[1] === 254);
+  };
+  if (!ips.length || ips.some(priv)) throw new Error('Feed no permitido (solo hosts públicos)');
+}
 // Quita HTML y normaliza entidades. El desescape va ANTES de quitar etiquetas: los feeds
 // escapan el HTML ("&lt;a href...&gt;") y si se quitan etiquetas primero, el HTML queda crudo.
 function stripTags(s) {
-  const NAMED = { lt: '<', gt: '>', quot: '"', apos: "'", nbsp: ' ', amp: '&', aacute: 'á', eacute: 'é', iacute: 'í', oacute: 'ó', uacute: 'ú', ntilde: 'ñ', uuml: 'ü', iexcl: '¡', iquest: '¿', laquo: '«', raquo: '»', hellip: '…', mdash: '—', ndash: '–', lsquo: '‘', rsquo: '’', ldquo: '“', rdquo: '”', deg: '°', euro: '€', times: '×', middot: '·', egrave: 'è', agrave: 'à', ccedil: 'ç', ouml: 'ö', auml: 'ä', szlig: 'ß' };
+  const NAMED = { lt: '<', gt: '>', quot: '"', apos: "'", nbsp: ' ', amp: '&', copy: '©', reg: '®', trade: '™', para: '¶', plusmn: '±', frac12: '½', frac14: '¼', frac34: '¾', sup2: '²', sup3: '³', ordf: 'ª', ordm: 'º', aacute: 'á', eacute: 'é', iacute: 'í', oacute: 'ó', uacute: 'ú', ntilde: 'ñ', uuml: 'ü', iexcl: '¡', iquest: '¿', laquo: '«', raquo: '»', hellip: '…', mdash: '—', ndash: '–', lsquo: '‘', rsquo: '’', ldquo: '“', rdquo: '”', deg: '°', euro: '€', times: '×', middot: '·', egrave: 'è', agrave: 'à', ccedil: 'ç', ouml: 'ö', auml: 'ä', szlig: 'ß' };
   const unesc = (x) => x
     .replace(/&#x([0-9a-f]+);/gi, (_, h) => String.fromCodePoint(parseInt(h, 16)))
     .replace(/&#(\d+);/g, (_, d) => String.fromCodePoint(+d))
@@ -591,12 +622,14 @@ function parseRssItems(xml, opts = {}) {
     let snippet = (pick('description') || pick('summary')).slice(0, 220);
     // Si el resumen repite el título (habitual en Google Noticias), no aporta: se omite
     if (snippet && title && snippet.toLowerCase().includes(title.toLowerCase().slice(0, 40))) snippet = '';
+    const ts = d && !isNaN(d.getTime()) ? d.getTime() : 0;
     items.push({
       title: title.slice(0, 200),
       url: link || '',
       src: opts.src || 'RSS',
       outlet: outlet.slice(0, 60),
-      date: d && !isNaN(d.getTime()) ? d.toISOString().slice(0, 10) : '',
+      date: ts ? d.toISOString().slice(0, 10) : '',
+      ts,
       snippet,
     });
   }
@@ -619,12 +652,15 @@ function newsKey(title) {
 // opts.newsOnly: solo prensa (sin Wikipedia) — para el resumen diario, que busca titulares
 async function newsForQuery(q, opts = {}) {
   const key = 'q:' + (opts.newsOnly ? 'news:' : '') + q.toLowerCase();
-  const hit = newsCacheGet(key, 30 * 60_000);
+  const hit = newsCacheGet(key, 15 * 60_000); // 15 min: las novedades cambian rápido
   if (hit) return { ...hit, cached: true };
   const enc = encodeURIComponent(q);
+  // En el resumen diario se piden solo notas recientes (operador when: de Google Noticias);
+  // la búsqueda manual sigue amplia pero se ordena por fecha.
+  const fresh = opts.newsOnly ? '%20when%3A14d' : '';
   const out = await Promise.allSettled([
     (async () => parseRssItems( // Google Noticias (edición hispanohablante)
-      await (await fetchTimeout(`https://news.google.com/rss/search?q=${enc}&hl=es-419&gl=AR&ceid=AR:es`, 10000)).text(),
+      await (await fetchTimeout(`https://news.google.com/rss/search?q=${enc}${fresh}&hl=es-419&gl=AR&ceid=AR:es`, 10000)).text(),
       { src: 'Google Noticias', max: 12 }))(),
     (async () => parseRssItems( // Bing Noticias en español
       await (await fetchTimeout(`https://www.bing.com/news/search?q=${enc}&format=RSS&setlang=es&setmkt=es-AR`, 10000)).text(),
@@ -640,13 +676,16 @@ async function newsForQuery(q, opts = {}) {
   ]);
   const items = out.flatMap(r => r.status === 'fulfilled' ? r.value : []).filter(x => !looksEnglish(x.title));
   const seen = new Set();
+  // Lo más nuevo primero (las fuentes ordenan por relevancia, no por fecha); sin fecha al final
   const dedup = items.filter(x => {
     const k = newsKey(x.title);
     if (!k || seen.has(k)) return false;
     seen.add(k); return true;
-  });
+  }).sort((a, b) => (b.ts || 0) - (a.ts || 0));
   const data = { query: q, updatedAt: new Date().toISOString(), items: dedup };
-  NEWS_CACHE.set(key, { at: Date.now(), data });
+  // No cachear el fracaso total: si todo falló, se reintenta la próxima vez en vez de servir vacío 30 min
+  const anyOk = out.some(r => r.status === 'fulfilled');
+  if (dedup.length || anyOk) NEWS_CACHE.set(key, { at: Date.now(), data });
   return { ...data, cached: false };
 }
 
@@ -688,22 +727,23 @@ function mixSources(items, max) {
 async function buildDigest(refresh) {
   const { topics, fallback } = digestTopics();
   const key = 'digest:' + todayKey() + ':' + topics.join('|');
-  const hit = newsCacheGet(key, 6 * 3600_000); // un resumen por día y conjunto de temas
+  const hit = newsCacheGet(key, 1 * 3600_000); // se regenera cada hora: "hoy" tiene que ser hoy
   if (hit && !refresh) return { ...hit, cached: true };
   const settled = await Promise.allSettled(topics.map(t => newsForQuery(t, { newsOnly: true })));
-  const MAX_AGE_DIAS = 60; // un resumen "de hoy" no debería traer notas de hace años
+  const MAX_AGE_DIAS = 14; // "Titulares de hoy": solo últimas novedades, nada de hace meses
   const frescos = (list) => list.filter(x => {
     if (!x.date) return true;
     const d = new Date(x.date + 'T00:00:00').getTime();
     return !isNaN(d) && (Date.now() - d) / 86400000 <= MAX_AGE_DIAS;
-  });
+  }).sort((a, b) => (b.ts || 0) - (a.ts || 0));
   const groups = topics.map((t, i) => {
     const items = mixSources(frescos(settled[i].status === 'fulfilled' ? settled[i].value.items : []), 4)
       .map(x => ({ title: x.title, url: x.url, src: x.src, outlet: x.outlet, date: x.date }));
     return { topic: t, items };
   }).filter(g => g.items.length);
   const payload = { date: todayKey(), updatedAt: new Date().toISOString(), fallback, topics: groups };
-  NEWS_CACHE.set(key, { at: Date.now(), data: payload });
+  // No cachear un resumen vacío por un fallo de fuentes (evita 6 h sin titulares)
+  if (groups.length) NEWS_CACHE.set(key, { at: Date.now(), data: payload });
   return { ...payload, cached: false };
 }
 
@@ -804,7 +844,8 @@ const server = http.createServer(async (req, res) => {
     }
     if (pathname === '/api/data' && req.method === 'PUT') {
       const body = await getBody(req);
-      if (!body || typeof body !== 'object') return respond(res, 400, { error: 'Datos inválidos' });
+      if (!body || typeof body !== 'object' || Array.isArray(body)) return respond(res, 400, { error: 'Datos inválidos' });
+      for (const k of Object.keys(body)) if (!PUTABLE_TOP.has(k)) delete body[k];
       const before = { routine: data.routine, meals: data.meals, projects: data.projects, learning: data.learning };
       data = { ...data, ...body };
       let game = null;
@@ -841,14 +882,17 @@ const server = http.createServer(async (req, res) => {
     }
     if (pathname === '/api/news/feed' && req.method === 'GET') {
       const feedUrl = String(url.searchParams.get('url') || '').trim();
-      if (!/^https?:\/\//i.test(feedUrl)) return respond(res, 400, { error: 'URL de feed inválida' });
+      try { await assertPublicFeedUrl(feedUrl); }
+      catch (e) { return respond(res, 400, { error: e.message }); }
       const hit = newsCacheGet('feed:' + feedUrl, 30 * 60_000);
       if (hit) return respond(res, 200, { ...hit, cached: true });
       try {
         const xml = await (await fetchTimeout(feedUrl, 10000)).text();
         let host = 'RSS';
         try { host = new URL(feedUrl).hostname.replace(/^www\./, ''); } catch (_) {}
-        const data = { url: feedUrl, updatedAt: new Date().toISOString(), items: parseRssItems(xml.slice(0, 500_000), { src: 'Tus feeds', feedName: host, max: 15 }) };
+        const feedItems = parseRssItems(xml.slice(0, 500_000), { src: 'Tus feeds', feedName: host, max: 15 })
+          .sort((a, b) => (b.ts || 0) - (a.ts || 0));
+        const data = { url: feedUrl, updatedAt: new Date().toISOString(), items: feedItems };
         NEWS_CACHE.set('feed:' + feedUrl, { at: Date.now(), data });
         return respond(res, 200, { ...data, cached: false });
       } catch (e) {
@@ -865,11 +909,13 @@ const server = http.createServer(async (req, res) => {
       const [, coll, id] = m;
       if (coll in COLLECTIONS || MUTABLE_TOP.has(coll)) {
         if (req.method === 'GET') {
+          if (id) return respond(res, 404, { error: 'No encontrado' });
           if (coll in COLLECTIONS) return respond(res, 200, COLLECTIONS[coll](data));
           return respond(res, 200, data[coll]);
         }
         if (req.method === 'POST') {
           const body = await getBody(req);
+          if (!body || typeof body !== 'object' || Array.isArray(body)) return respond(res, 400, { error: 'Datos inválidos' });
           if (MUTABLE_TOP.has(coll)) {
             if (coll === 'finances' && Array.isArray(body.expenses)) {
               body.expenses = body.expenses.map(e => ({ ...e, id: e.id || uid() }));
@@ -888,6 +934,7 @@ const server = http.createServer(async (req, res) => {
           const idx = list.findIndex(x => x.id === id);
           if (idx === -1) return respond(res, 404, { error: 'No encontrado' });
           const body = await getBody(req);
+          if (!body || typeof body !== 'object' || Array.isArray(body)) return respond(res, 400, { error: 'Datos inválidos' });
           const before = { ...list[idx] };
           list[idx] = { ...list[idx], ...body, id };
           let gameMsg = null;
@@ -1024,7 +1071,7 @@ const server = http.createServer(async (req, res) => {
           'Eres un curador de noticias, claro y directo. Respondes en español.',
           `El usuario está metido en: ${focus}.`,
           'Titulares encontrados:',
-          ...items.slice(0, 20).map((x, i) => `${i + 1}. [${x.source || '?'}] ${x.title}`),
+          ...items.slice(0, 20).map((x, i) => `${i + 1}. [${x.source || '?'}] ${String(x.title || '').slice(0, 200)}`),
           'Responde con este formato exacto, bullets con *, corto:',
           '**LO IMPORTANTE** (máx 4 bullets: qué pasó y por qué le sirve a alguien metido en sus temas)',
           '**PARA PROFUNDIZAR** (máx 2 bullets: qué titular vale abrir primero y por qué, 1 línea cada uno)'
@@ -1096,14 +1143,6 @@ const server = http.createServer(async (req, res) => {
     if (filePath.endsWith('index.html')) {
       fs.readFile(abs, 'utf8', (err, html) => {
         if (err) return respond(res, 404, { error: 'No encontrado' });
-        const inline = (tag, jsPath) => {
-          try {
-            const js = fs.readFileSync(path.join(PUBLIC_DIR, jsPath), 'utf8').replace(/<\/script/gi, '<\\/script');
-            return `<script>\n${js}\n</script>`;
-          } catch (e) {
-            return tag; // si falla, deja la referencia externa
-          }
-        };
         const appJs = fs.readFileSync(path.join(PUBLIC_DIR, 'app.js'), 'utf8').replace(/<\/script/gi, '<\\/script');
         html = html.replace('<!--APP_JS-->', () => `<script>\n${appJs}\n</script>`);
         res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' });
