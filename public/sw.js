@@ -1,7 +1,9 @@
-// procrastin-out SW: hace la app instalable y cachea estáticos.
-// El HTML y la API siempre van a la red (autenticación + datos frescos).
-const V = 'pout-v1';
-const STATIC = ['/style.css', '/icon-192.png', '/icon-512.png', '/icon-180.png', '/icon.svg', '/manifest.webmanifest'];
+// procrastin-out SW: hace la app instalable y cachea SOLO imágenes/manifest.
+// HTML, API, JS y CSS nunca se sirven desde caché para evitar versiones viejas
+// después de un deploy: van a la red primero y la caché es solo respaldo offline.
+const V = 'pout-v5';
+const STATIC = ['/icon-192.png', '/icon-512.png', '/icon-180.png', '/manifest.webmanifest', '/splash-real.png', '/mark-real.png', '/label-real.png'];
+const NETWORK_FIRST = /\.(js|css)$/i;
 self.addEventListener('install', (e) => {
   e.waitUntil(caches.open(V).then((c) => c.addAll(STATIC)).then(() => self.skipWaiting()));
 });
@@ -17,6 +19,21 @@ self.addEventListener('fetch', (e) => {
   const u = new URL(e.request.url);
   if (u.origin !== location.origin) return;
   if (u.pathname.startsWith('/api/') || u.pathname === '/' || u.pathname.endsWith('.html')) return; // siempre a red
+  if (NETWORK_FIRST.test(u.pathname) || u.pathname === '/sw.js') {
+    // Red primero: si hay versión nueva en el servidor, se usa; caché solo si no hay red.
+    e.respondWith(
+      fetch(e.request, { cache: 'no-store' })
+        .then((res) => {
+          if (res && res.ok) {
+            const copy = res.clone();
+            caches.open(V).then((c) => c.put(e.request, copy));
+          }
+          return res;
+        })
+        .catch(() => caches.match(e.request))
+    );
+    return;
+  }
   e.respondWith(
     caches.match(e.request).then(
       (hit) =>

@@ -4,27 +4,29 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <title>procrastin-out — entrar</title>
-<meta name="theme-color" content="#e2482e">
+<meta name="theme-color" content="#0D251C">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" type="image/png" sizes="192x192" href="icon-192.png">
-<link rel="icon" type="image/svg+xml" href="icon.svg">
 <link rel="apple-touch-icon" href="icon-180.png">
-<style>
-:root { color-scheme: light dark; --bg:#f3eee3; --card:rgba(255,253,247,.86); --ink:#221c12; --muted:#7b7160; --accent:#ff4b26; --accent-2:#d99a12; --danger:#d2342c; --line:rgba(34,28,18,.14); }
-@media (prefers-color-scheme: dark) {
-  :root { --bg:#0d0f18; --card:rgba(20,24,38,.78); --ink:#f4f1e8; --muted:#9c96a5; --accent:#ff5b36; --accent-2:#f5c044; --danger:#ff6f66; --line:rgba(244,241,232,.14); }
-}
-body { font-family:"Avenir Next","Segoe UI",system-ui,sans-serif; color:var(--ink); display:flex; min-height:100vh; align-items:center; justify-content:center; margin:0; padding:18px; background: radial-gradient(760px 420px at 18% 8%, rgba(255,91,54,.24), transparent 62%), radial-gradient(680px 420px at 84% 18%, rgba(245,189,47,.20), transparent 60%), linear-gradient(180deg, var(--bg), rgba(0,0,0,.06)); background-attachment: fixed; }
-.box { position:relative; background:var(--card); border:1px solid var(--line); border-radius:22px; padding:30px 28px; width:100%; max-width:360px; text-align:center; box-shadow:0 24px 60px rgba(46,28,8,.18); backdrop-filter: blur(18px) saturate(1.2); overflow:hidden; }
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Unbounded:wght@500;700;800;900&family=Manrope:wght@400;500;600;700;800&display=swap">
+<style>  :root { color-scheme: dark; --bg:#0D251C; --bg-2:#163A2B; --card:rgba(13,37,28,.80); --ink:#FFFFFF; --muted:#9DB8AA; --accent:#2E9D68; --accent-hot:#4CC587; --accent-2:#E67E22; --danger:#ff6f66; --line:rgba(255,255,255,.12); }
+body { font-family:"Manrope","Segoe UI",system-ui,sans-serif; color:var(--ink); display:flex; min-height:100vh; align-items:center; justify-content:center; margin:0; padding:18px; background:
+  radial-gradient(760px 420px at 18% 6%, rgba(230,126,34,.25), transparent 62%),
+  radial-gradient(680px 420px at 84% 94%, rgba(230,126,34,.25), transparent 60%),
+  linear-gradient(180deg, var(--bg), var(--bg-2)); background-attachment: fixed; }
+.box { position:relative; background:var(--card); border:1px solid var(--line); border-radius:22px; padding:30px 28px; width:100%; max-width:360px; text-align:center; box-shadow:0 24px 60px rgba(0,0,0,.45); backdrop-filter: blur(18px) saturate(1.2); overflow:hidden; }
 .box::before { content:""; position:absolute; inset:0 0 auto 0; height:6px; background:linear-gradient(90deg,var(--accent),var(--accent-2),#1e9e57); }
-.mark { width:58px; height:58px; margin:0 auto 10px; display:grid; place-items:center; font-size:30px; color:#fff; border-radius:20px; background:linear-gradient(135deg,#ff3d1e,#ff7a3d 52%,#f5bd2f); box-shadow:0 12px 24px rgba(255,77,46,.35), inset 0 1px 0 rgba(255,255,255,.45); }
-h1 { font-size:27px; margin:0; letter-spacing:.01em; text-transform:lowercase; }
+.mark { width:118px; height:118px; margin:4px auto 12px; }
+.mark img { width:100%; height:100%; display:block; filter: drop-shadow(0 10px 16px rgba(8,30,18,.35)); }
+h1 { font-family:\"Unbounded\",\"Manrope\",sans-serif; font-size:23px; font-weight:800; margin:0; letter-spacing:-.01em; text-transform:lowercase; }
 p.sub { color:var(--muted); font-size:13px; margin:6px 0 18px; }
-input { width:100%; background:rgba(255,255,255,.55); border:1px solid var(--line); color:var(--ink); border-radius:12px; padding:12px; font-size:17px; margin-bottom:9px; text-align:center; letter-spacing:3px; box-sizing:border-box; }
-input:focus { outline:none; border-color:var(--accent); box-shadow:0 0 0 4px rgba(255,91,54,.18); }
-button { width:100%; background:linear-gradient(135deg,var(--accent),#ff7a3d); color:#fff; border:1px solid rgba(255,255,255,.22); border-radius:12px; padding:12px; font-size:15px; font-weight:800; cursor:pointer; box-shadow:0 12px 24px rgba(255,77,46,.30); }
+input { width:100%; background:rgba(255,255,255,.08); border:1px solid var(--line); color:var(--ink); border-radius:12px; padding:12px; font-size:17px; margin-bottom:9px; text-align:center; letter-spacing:3px; box-sizing:border-box; }
+input:focus { outline:none; border-color:var(--accent-hot); box-shadow:0 0 0 4px rgba(76,197,135,.18); }
+button { width:100%; background:linear-gradient(135deg,var(--accent),var(--accent-2)); color:#fff; border:1px solid rgba(255,255,255,.22); border-radius:12px; padding:12px; font-size:15px; font-weight:800; cursor:pointer; box-shadow:0 12px 24px rgba(230,126,34,.28); }
 button:hover { filter:brightness(1.05); transform:translateY(-1px); }
 .err { color:var(--danger); font-size:13px; min-height:20px; margin:10px 0; font-weight:700; }
 .err.shake { animation: shake .28s ease; }
@@ -34,7 +36,7 @@ a { color:var(--muted); font-size:13px; }
 </head>
 <body>
 <div class="box">
-  <div class="mark" aria-hidden="true">🥊</div>
+  <div class="mark"><img src="icon-192.png" alt="procrastin-out"></div>
   <h1>procrastin-out</h1>
   <p class="sub" id="sub">Comprobando...</p>
   <div id="form"></div>
@@ -87,7 +89,7 @@ async function init(){
 }
 init();
 if ('serviceWorker' in navigator) {
-  window.addEventListener('load', () => navigator.serviceWorker.register('/sw.js').catch(() => {}));
+  window.addEventListener('load', () => navigator.serviceWorker.register('/sw.js', { updateViaCache: 'none' }).catch(() => {}));
 }
 </script>
 </body>

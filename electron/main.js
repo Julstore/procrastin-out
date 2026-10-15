@@ -25,6 +25,9 @@ function startServer() {
     process.env.POUT_DATA_DIR = path.join(app.getPath('userData'), 'data');
   }
   process.env.PORT = String(PORT);
+  // Solo loopback: el servidor por defecto escucha en 0.0.0.0 (para el celular en la WiFi),
+  // pero la app de escritorio no debe exponerse a la red local.
+  process.env.HOST = '127.0.0.1';
   serverApi = require(SERVER_PATH);
 }
 
@@ -37,6 +40,7 @@ async function waitForServer(tries = 75) {
 }
 
 let win = null;
+let splash = null;
 function createWindow() {
   win = new BrowserWindow({
     width: 1200,
@@ -44,8 +48,9 @@ function createWindow() {
     minWidth: 900,
     minHeight: 600,
     title: 'procrastin-out',
+    icon: path.join(__dirname, '..', 'public', 'icon.ico'),
     autoHideMenuBar: true,
-    backgroundColor: '#1e1e1e',
+    backgroundColor: '#0D251C',
   });
   Menu.setApplicationMenu(null);
   // Los links externos (noticias, Wikipedia) se abren en el navegador del sistema.
@@ -61,6 +66,10 @@ function createWindow() {
     item.setSavePath(path.join(app.getPath('downloads'), item.getFilename()));
   });
   win.on('closed', () => { win = null; });
+  // El splash se cierra cuando la app terminó de cargar.
+  win.webContents.once('did-finish-load', () => {
+    if (splash) { splash.close(); splash = null; }
+  });
   win.loadURL(URL);
 }
 
@@ -88,6 +97,16 @@ app.whenReady().then(async () => {
     app.quit();
     return;
   }
+  // Splash de marca mientras la UI carga (misma pantalla que la PWA).
+  splash = new BrowserWindow({
+    width: 405,
+    height: 720,
+    frame: false,
+    resizable: false,
+    center: true,
+    backgroundColor: '#0D251C',
+  });
+  splash.loadFile(path.join(__dirname, '..', 'public', 'splash.html'));
   createWindow();
 });
 

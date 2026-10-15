@@ -10,6 +10,7 @@
   "scripts": {
     "start": "electron .",
     "server": "node server.js",
+    "test": "node --test tests/feed-safety.test.js tests/ai-budget.test.js tests/ai-server.test.js",
     "cloud": "node server.js",
     "migrate": "node scripts/push-to-cloud.mjs",
     "dist": "electron-builder --win nsis"
@@ -23,6 +24,7 @@
     "asar": false,
     "files": [
       "server.js",
+      "lib/**/*",
       "public/**/*",
       "electron/**/*",
       "package.json"

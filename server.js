@@ -4,8 +4,9 @@ const http = require('http');
 const fs = require('fs');
 const crypto = require('crypto');
 const os = require('os');
-const dns = require('dns').promises;
 const path = require('path');
+const { assertPublicFeedUrl, fetchPublicFeed, stripTags, parseRssItems, clientIpFrom } = require('./lib/feed-safety');
+const { limitsFromEnv, getUsage, quotaError, reserveRequest, tokenCounts, recordCall, TtlCache, cacheKey } = require('./lib/ai-budget');
 
 // Carga de .env (clave de IA) sin dependencias externas.
 // La app de escritorio (Electron) puede definir POUT_DATA_DIR: la config junto a los datos
@@ -26,6 +27,8 @@ loadEnvFile(path.join(__dirname, '.env'));
 const DATA_FILE = path.join(DATA_DIR, 'vida.json');
 const AUTH_FILE = path.join(DATA_DIR, 'auth.json'); // PIN (hash) — fuera del export de datos
 const PUBLIC_DIR = path.join(__dirname, 'public');
+// Marca e íconos: públicos (sin datos) para que login y la instalación PWA los vean sin sesión.
+const PUBLIC_ASSETS = new Set(['/manifest.webmanifest', '/mark-real.png', '/label-real.png', '/icon-192.png', '/icon-512.png', '/icon-180.png', '/icon-maskable-512.png', '/splash-real.png']);
 const MIME = {
   '.html': 'text/html; charset=utf-8',
   '.js': 'text/javascript; charset=utf-8',
@@ -82,6 +85,7 @@ const DEFAULT_DATA = {
   createdAt: new Date().toISOString(),
   hero: { name: 'Aventurero', xp: 0, totalXp: 0, level: 1, streak: 0, badges: {}, lastMealXpAt: 0, freeze: {}, history: [] }, // history: {date, action, xp, title}; badges: {id: 'YYYY-MM-DD'}; freeze: {week, used}
   tasks: [],           // { id, title, area, due, priority, done, createdAt }
+  weeks: [],           // planes semanales fijados: { id, title, taskIds: [], status: 'active'|'done', bonusGiven, createdAt }
   habits: [],          // { id, name, emoji, targetPerWeek, log: { 'YYYY-MM-DD': 1 } }
   meals: {},           // { 'YYYY-MM-DD': { breakfast, lunch, dinner, snacks, water } }
   commitments: [],     // { id, title, person, date, notes, done, createdAt }
@@ -94,6 +98,9 @@ const DEFAULT_DATA = {
   profile: {},         // { heightCm, weightKg, age, sex, goalWeight, activity } — perfil nutricional
   interests: [],       // [string] — temas de interés para el centro de noticias
   newsFeeds: [],       // [{ id, name, url }] — feeds RSS seguidos en el centro de noticias
+  smoking: { answered: false, tobacco: false, cannabis: false, log: {} }, // log: { 'YYYY-MM-DD': { cigarettes, joints } } — salud
+  wishlist: [],        // [{ id, title, price, priority: 'alta'|'media'|'baja', bought, boughtAt, createdAt }] — deseos de compra (finanzas)
+  shopping: [],        // [{ id, name, qty, done, createdAt }] — lista de supermercado
 };;
 
 // Backfill de claves nuevas (lo usan el modo archivo y el modo nube)
@@ -178,15 +185,33 @@ function loginFail(ip) {
   if (e.count >= 5) e.until = Date.now() + 60_000;
   LOGIN_FAILS.set(ip, e);
 }
-const SESSIONS = new Map(); // token -> {createdAt} (en memoria: reiniciar pide login de nuevo)
+// Sesiones en memoria (reiniciar el servidor pide login de nuevo).
+// Expiran por inactividad (SESSION_IDLE_MS) y por antigüedad absoluta (SESSION_MAX_MS).
+const SESSION_IDLE_MS = 12 * 3600 * 1000;
+const SESSION_MAX_MS = 7 * 24 * 3600 * 1000;
+const SESSIONS = new Map(); // token -> {createdAt, lastSeen}
+function sessionExpired(s, now = Date.now()) {
+  return now - s.lastSeen > SESSION_IDLE_MS || now - s.createdAt > SESSION_MAX_MS;
+}
+function purgeSessions() {
+  const now = Date.now();
+  for (const [t, s] of SESSIONS) if (sessionExpired(s, now)) SESSIONS.delete(t);
+}
 function newSession() {
+  purgeSessions();
   const token = crypto.randomBytes(32).toString('hex');
-  SESSIONS.set(token, { createdAt: Date.now() });
+  const now = Date.now();
+  SESSIONS.set(token, { createdAt: now, lastSeen: now });
   return token;
 }
 function getSession(req) {
   const m = (req.headers.cookie || '').match(/(?:^|;\s*)pout_sess=([a-f0-9]{64})/);
-  return m && SESSIONS.has(m[1]) ? m[1] : null;
+  if (!m) return null;
+  const s = SESSIONS.get(m[1]);
+  if (!s) return null;
+  if (sessionExpired(s)) { SESSIONS.delete(m[1]); return null; }
+  s.lastSeen = Date.now();
+  return m[1];
 }
 // Secure solo en la nube (en LAN/local el http lo rechazaría y rompería el login).
 // Se evalúa al arrancar: si agregás PUBLIC_URL después, reiniciá el servidor.
@@ -196,11 +221,14 @@ const CLEAR_COOKIE = `pout_sess=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0${COO
 
 const COLLECTIONS = {
   tasks: data => data.tasks ?? [],
+  weeks: data => data.weeks ?? [],
   habits: data => data.habits ?? [],
   commitments: data => data.commitments ?? [],
   learning: data => data.learning ?? [],
   projects: data => data.projects ?? [],
   appointments: data => data.appointments ?? [],
+  wishlist: data => data.wishlist ?? [],
+  shopping: data => data.shopping ?? [],
 };
 const MUTABLE_TOP = new Set(['meals', 'finances', 'measurements']);
 // PUT /api/data solo acepta claves conocidas. El héroe (XP/nivel/insignias) y los metadatos
@@ -361,6 +389,18 @@ function grantXp(action, meta = {}) {
 }
 
 function handleHeroPatch(coll, oldItem, newItem) {
+  // Cierre de semana: bonus único solo si TODAS las tareas del plan están hechas
+  // (cerrar sin completar no da XP; el flag igual se marca para no premiar después).
+  if (coll === 'weeks') {
+    if (newItem.status === 'done' && !oldItem.bonusGiven) {
+      newItem.bonusGiven = true;
+      const ts = (newItem.taskIds || []).map(id => (data.tasks || []).find(t => t.id === id)).filter(Boolean);
+      if (ts.length && ts.every(t => t.done)) {
+        return grantXp('weeks', { xp: Math.max(30, ts.length * 10), title: 'Semana completada: ' + (newItem.title || '') });
+      }
+    }
+    return null;
+  }
   if (!HERO_ACTIONS.has(coll)) return null;
   if (coll === 'learning') {
     // XP proporcional al avance registrado (tope 30 por ajuste)
@@ -493,13 +533,31 @@ function weekSummary() {
   }
   return parts.join('\n') || 'sin rutina todavía';
 }
-async function llmCall(messages) {
+// Endpoint configurable: permite probar contra un upstream falso sin salir a internet.
+const OPENLLM_BASE = (process.env.OPENLLM_BASE_URL || 'https://www.openllm.sh').replace(/\/+$/, '');
+const AI_LIMITS = limitsFromEnv();
+const AI_CACHE = new TtlCache({ ttlMs: AI_LIMITS.cacheTtlMs, max: AI_LIMITS.cacheMax });
+// kind: qué pidió el usuario (para el registro). scope: id de sesión, así la caché nunca cruza sesiones.
+async function llmCall(messages, { kind = 'otro', scope = '' } = {}) {
   const key = process.env.OPENLLM_API_KEY;
   if (!key) throw new Error('OPENLLM_API_KEY no configurada: crea la clave en openllm.sh y ponla en el archivo .env junto a server.js como OPENLLM_API_KEY=sk-llm-...');
+  const day = todayKey();
+  const ck = cacheKey(scope, LLM_MODEL, messages);
+  const cached = AI_CACHE.get(ck);
+  if (cached !== undefined) {
+    data.aiUsage = recordCall(data.aiUsage, day, { kind, model: LLM_MODEL, cached: true });
+    save();
+    return cached;
+  }
+  const blocked = quotaError(getUsage(data.aiUsage, day), AI_LIMITS);
+  if (blocked) throw new Error(blocked);
+  data.aiUsage = reserveRequest(data.aiUsage, day); // se reserva antes del await
+  save();
+  const callLog = { kind, model: LLM_MODEL, ok: false };
   const controller = new AbortController();
   const t = setTimeout(() => controller.abort(), 150000);
   try {
-    const r = await fetch('https://www.openllm.sh/v1/chat/completions', {
+    const r = await fetch(`${OPENLLM_BASE}/v1/chat/completions`, {
       method: 'POST',
       headers: { 'Authorization': `Bearer ${key}`, 'Content-Type': 'application/json' },
       body: JSON.stringify({ model: LLM_MODEL, messages, max_tokens: 8000, temperature: 0.6 }),
@@ -529,12 +587,18 @@ async function llmCall(messages) {
       }
       if (lastGood !== -1) content = content.slice(0, lastGood + 1);
     }
+    Object.assign(callLog, { ok: true, ...tokenCounts(j.usage, messages, content) });
+    AI_CACHE.set(ck, content);
     return content;
-  } finally { clearTimeout(t); }
+  } finally {
+    clearTimeout(t);
+    data.aiUsage = recordCall(data.aiUsage, day, callLog);
+    save();
+  }
 }
-async function aiChat(res, messages) {
+async function aiChat(res, messages, opts) {
   try {
-    const reply = await llmCall(messages);
+    const reply = await llmCall(messages, opts);
     respond(res, 200, { reply });
   } catch (e) {
     console.error('IA:', e.message);
@@ -560,80 +624,6 @@ async function fetchTimeout(url, ms = 9000, opts = {}) {
     if (!r.ok) throw new Error(`HTTP ${r.status}`);
     return r;
   } finally { clearTimeout(t); }
-}
-// Anti-SSRF: /api/news/feed solo acepta hosts públicos (bloquea localhost, LAN y metadata cloud)
-async function assertPublicFeedUrl(feedUrl) {
-  let u;
-  try { u = new URL(feedUrl); } catch (_) { throw new Error('URL de feed inválida'); }
-  if (u.protocol !== 'http:' && u.protocol !== 'https:') throw new Error('URL de feed inválida');
-  if (u.username || u.password) throw new Error('URL de feed inválida');
-  let ips = [];
-  try { ips = (await dns.lookup(u.hostname, { all: true })).map(r => r.address); }
-  catch (_) { throw new Error('No se pudo resolver el feed'); }
-  const priv = (ip) => {
-    if (ip === '::1' || ip === '::' || ip === '::ffff:127.0.0.1') return true;
-    if (ip.includes(':')) { // IPv6: solo unicast global 2000::/3
-      const first = parseInt(ip.split(':')[0], 16);
-      return !(first >= 0x2000 && first < 0x4000);
-    }
-    const p = ip.split('.').map(Number);
-    if (p.length !== 4 || p.some(n => !(n >= 0 && n <= 255))) return true;
-    return p[0] === 10 || p[0] === 127 || p[0] === 0
-      || (p[0] === 172 && p[1] >= 16 && p[1] <= 31)
-      || (p[0] === 192 && p[1] === 168)
-      || (p[0] === 169 && p[1] === 254);
-  };
-  if (!ips.length || ips.some(priv)) throw new Error('Feed no permitido (solo hosts públicos)');
-}
-// Quita HTML y normaliza entidades. El desescape va ANTES de quitar etiquetas: los feeds
-// escapan el HTML ("&lt;a href...&gt;") y si se quitan etiquetas primero, el HTML queda crudo.
-function stripTags(s) {
-  const NAMED = { lt: '<', gt: '>', quot: '"', apos: "'", nbsp: ' ', amp: '&', copy: '©', reg: '®', trade: '™', para: '¶', plusmn: '±', frac12: '½', frac14: '¼', frac34: '¾', sup2: '²', sup3: '³', ordf: 'ª', ordm: 'º', aacute: 'á', eacute: 'é', iacute: 'í', oacute: 'ó', uacute: 'ú', ntilde: 'ñ', uuml: 'ü', iexcl: '¡', iquest: '¿', laquo: '«', raquo: '»', hellip: '…', mdash: '—', ndash: '–', lsquo: '‘', rsquo: '’', ldquo: '“', rdquo: '”', deg: '°', euro: '€', times: '×', middot: '·', egrave: 'è', agrave: 'à', ccedil: 'ç', ouml: 'ö', auml: 'ä', szlig: 'ß' };
-  const unesc = (x) => x
-    .replace(/&#x([0-9a-f]+);/gi, (_, h) => String.fromCodePoint(parseInt(h, 16)))
-    .replace(/&#(\d+);/g, (_, d) => String.fromCodePoint(+d))
-    .replace(/&([a-z]+);/gi, (m, n) => (NAMED[n.toLowerCase()] !== undefined ? NAMED[n.toLowerCase()] : m));
-  const out = unesc(String(s || '').replace(/<!\[CDATA\[([\s\S]*?)\]\]>/g, '$1')).replace(/<[^>]*>/g, '');
-  return unesc(out).replace(/\s+/g, ' ').trim();
-}
-// Parsea RSS/Atom: título, link, medio de origen y fecha normalizada (YYYY-MM-DD).
-// opts.src = nombre de la plataforma (agrupa en el cliente); opts.feedName = medio por defecto.
-function parseRssItems(xml, opts = {}) {
-  const max = opts.max || 15;
-  const items = [];
-  const re = /<(item|entry)[\s>]([\s\S]*?)<\/\1>/gi;
-  let m;
-  while ((m = re.exec(xml)) && items.length < max) {
-    const body = m[2];
-    const pick = (tag) => {
-      const r = new RegExp(`<${tag}[^>]*>([\\s\\S]*?)<\\/${tag}>`, 'i').exec(body);
-      return r ? stripTags(r[1]) : '';
-    };
-    let link = pick('link');
-    const href = /<link[^>]*href=["']([^"']+)["']/i.exec(body);
-    if (href) link = href[1];
-    let title = pick('title');
-    // Medios: Bing usa News:Source; Google Noticias usa <source> y además termina el título en " - Medio"
-    const outlet = pick('News:Source') || pick('source') || opts.feedName || '';
-    if (outlet && title.endsWith(' - ' + outlet)) title = title.slice(0, -(outlet.length + 3)).trim();
-    if (!title) continue;
-    const rawDate = pick('pubDate') || pick('published') || pick('updated') || pick('dc:date');
-    const d = rawDate ? new Date(rawDate) : null;
-    let snippet = (pick('description') || pick('summary')).slice(0, 220);
-    // Si el resumen repite el título (habitual en Google Noticias), no aporta: se omite
-    if (snippet && title && snippet.toLowerCase().includes(title.toLowerCase().slice(0, 40))) snippet = '';
-    const ts = d && !isNaN(d.getTime()) ? d.getTime() : 0;
-    items.push({
-      title: title.slice(0, 200),
-      url: link || '',
-      src: opts.src || 'RSS',
-      outlet: outlet.slice(0, 60),
-      date: ts ? d.toISOString().slice(0, 10) : '',
-      ts,
-      snippet,
-    });
-  }
-  return items;
 }
 // Filtro de idioma: Bing a veces cuela titulares en inglés aunque la consulta sea en español.
 // Si el título tiene acentos/eñe/ signos de apertura se considera español; si no, se descarta
@@ -770,13 +760,36 @@ async function getBody(req) {
   try { return JSON.parse(raw); } catch { throw new Error('JSON inválido'); }
 }
 
+// Headers de seguridad en todas las respuestas.
+// script-src/style-src llevan 'unsafe-inline' porque la app usa onclick="" y style="" inline y login.html tiene un <script> inline;
+// quitarlo exige migrar esos handlers a addEventListener (pendiente).
+const CSP = [
+  "default-src 'self'",
+  "script-src 'self' 'unsafe-inline'",
+  "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
+  "font-src 'self' https://fonts.gstatic.com",
+  "img-src 'self' data:",
+  "connect-src 'self'",
+  "manifest-src 'self'",
+  "worker-src 'self'",
+  "object-src 'none'",
+  "base-uri 'self'",
+  "form-action 'self'",
+  "frame-ancestors 'none'",
+].join('; ');
 const server = http.createServer(async (req, res) => {
+  res.setHeader('Content-Security-Policy', CSP);
+  res.setHeader('X-Frame-Options', 'DENY');
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.setHeader('Referrer-Policy', 'same-origin');
+  res.setHeader('Cross-Origin-Opener-Policy', 'same-origin');
+  if (publicBase()) res.setHeader('Strict-Transport-Security', 'max-age=31536000');
   const url = new URL(req.url, `http://localhost:${PORT}`);
   const pathname = url.pathname;
 
   try {
     // ---- Auth (PIN local) ----
-    const clientIp = (req.headers['x-forwarded-for'] || '').split(',')[0].trim() || req.socket.remoteAddress || '?';
+    const clientIp = clientIpFrom(req, process.env.TRUST_PROXY === '1');
     if (pathname === '/api/auth/status' && req.method === 'GET') {
       const a = loadAuth();
       return respond(res, 200, { setup: !!a.pinHash, unlocked: !!getSession(req) });
@@ -821,10 +834,15 @@ const server = http.createServer(async (req, res) => {
       if (pin.length < 4 || pin.length > 64) return respond(res, 400, { error: 'El PIN debe tener al menos 4 caracteres' });
       const salt = crypto.randomBytes(16).toString('hex');
       saveAuth({ ...a, pinHash: hashPin(pin, salt), salt });
-      return respond(res, 200, { ok: true });
+      // Cambiar el PIN cierra todas las sesiones (incluidas las de otros dispositivos).
+      // La sesión actual se reemplaza por una nueva para no desloguear a quien cambió el PIN.
+      SESSIONS.clear();
+      const token = newSession();
+      res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8', 'Set-Cookie': SESSION_COOKIE(token) });
+      return res.end(JSON.stringify({ ok: true }));
     }
     // Puerta: páginas y API exigen sesión válida (login.html siempre público)
-    if (!getSession(req)) {
+    if (!getSession(req) && !PUBLIC_ASSETS.has(pathname)) {
       if (pathname.startsWith('/api/')) return respond(res, 401, { error: 'No autenticado', login: '/login.html' });
       if (pathname !== '/login.html') {
         res.writeHead(302, { Location: '/login.html' });
@@ -887,7 +905,7 @@ const server = http.createServer(async (req, res) => {
       const hit = newsCacheGet('feed:' + feedUrl, 30 * 60_000);
       if (hit) return respond(res, 200, { ...hit, cached: true });
       try {
-        const xml = await (await fetchTimeout(feedUrl, 10000)).text();
+        const xml = await fetchPublicFeed(feedUrl, { timeoutMs: 10000 });
         let host = 'RSS';
         try { host = new URL(feedUrl).hostname.replace(/^www\./, ''); } catch (_) {}
         const feedItems = parseRssItems(xml.slice(0, 500_000), { src: 'Tus feeds', feedName: host, max: 15 })
@@ -964,9 +982,20 @@ const server = http.createServer(async (req, res) => {
     }
 
     // ---- IA: recomendaciones (Novita AI, endpoint OpenAI-compatible) ----
+    if (pathname === '/api/ai/usage' && req.method === 'GET') {
+      const u = getUsage(data.aiUsage, todayKey());
+      return respond(res, 200, {
+        day: u.day, requests: u.requests, tokens: u.tokens,
+        limits: { dailyRequests: AI_LIMITS.dailyRequests, dailyTokens: AI_LIMITS.dailyTokens },
+        cacheTtlMin: AI_LIMITS.cacheTtlMs / 60000,
+        recent: u.log.slice(-30).reverse(),
+      });
+    }
     if (pathname === '/api/ai/advise' && req.method === 'POST') {
       const body = await getBody(req);
       const kind = body?.kind || 'coach';
+      const aiOpts = { kind, scope: getSession(req) || '' };
+      const ai = (messages) => llmCall(messages, aiOpts);
       const p = data.profile || {};
       const latest = (data.measurements || []).slice().sort((a, b) => b.date.localeCompare(a.date))[0];
       const routineSummary = Object.entries(data.routine || {})
@@ -991,7 +1020,7 @@ const server = http.createServer(async (req, res) => {
           '{"weeklyPlan":[{"day":1,"focus":"piernas","exercises":["Sentadillas 4x10","Prensa 3x12"],"rest":false},...]}',
           'day: 1=Lunes ... 7=Domingo. focus: uno de pecho|espalda|piernas|hombros|brazos|cardio|core. exercises: 3-5 strings, cada uno "Ejercicio NxM" (series x repeticiones). Incluye al menos 1 día de cardio/core y 1-2 días de descanso. Adapta la intensidad al perfil: novato si activity 1.2, volumen moderado si 1.375-1.55, alto si 1.725. Los 7 días deben aparecer (rest:true para los de descanso, exercises vacío).'
         ].join('\n');
-        const raw = await llmCall([
+        const raw = await ai([
           { role: 'system', content: 'Eres un entrenador personal prudente. Respondes SOLO con JSON válido, sin formato markdown ni texto extra.' },
           { role: 'user', content: pr },
         ]);
@@ -1019,7 +1048,7 @@ const server = http.createServer(async (req, res) => {
           '{"weeklyPlan":[{"day":1,"focus":"piernas","exercises":["Sentadillas 4x12"],"rest":false}],"changeSummary":"breve texto de qué subiste/mantuviste y por qué"}',
           'day: 1=Lunes ... 7=Domingo. focus: pecho|espalda|piernas|hombros|brazos|cardio|core. Los 7 días deben aparecer (rest:true para descanso, exercises vacío). changeSummary: máximo 3 líneas marcadas con *.'
         ].join('\n');
-        const raw = await llmCall([
+        const raw = await ai([
           { role: 'system', content: 'Eres un entrenador personal prudente. Respondes SOLO con JSON válido, sin markdown ni texto extra.' },
           { role: 'user', content: pr },
         ]);
@@ -1039,7 +1068,7 @@ const server = http.createServer(async (req, res) => {
         const m = (data.meals || {})[day] || {};
         const fields = [['Desayuno', m.breakfast], ['Almuerzo', m.lunch], ['Comida', m.dinner], ['Merienda', m.snacks], ['Cena', m.supper], ['Snacks', m.extra]]
           .filter(([, v]) => String(v || '').trim()).map(([k, v]) => `${k}: ${v}`).join('\n') || 'sin registros';
-        const raw = await llmCall([
+        const raw = await ai([
           { role: 'system', content: 'Eres un nutricionista que estima calorías. Respondes SOLO con JSON válido, sin markdown ni texto extra.' },
           { role: 'user', content: [
             'Estima las calorías y el peso aproximado de estas comidas de un día (perfil: ' + (p.weightKg || '?') + ' kg, objetivo ' + (p.goalWeight || '?') + ' kg).',
@@ -1079,7 +1108,7 @@ const server = http.createServer(async (req, res) => {
         await aiChat(res, [
           { role: 'system', content: 'Eres un curador de noticias tech y cultura, claro y directo. Sin saludo ni cierre largo.' },
           { role: 'user', content: brief },
-        ]);
+        ], aiOpts);
         return;
       }
       if (kind === 'strategy') {
@@ -1115,7 +1144,7 @@ const server = http.createServer(async (req, res) => {
         await aiChat(res, [
           { role: 'system', content: 'Eres un coach estratégico anti-procrastinación, claro y directo. Sin saludo ni cierre largo.' },
           { role: 'user', content: strat },
-        ]);
+        ], aiOpts);
         return;
       }
       const prompt = [
@@ -1129,7 +1158,7 @@ const server = http.createServer(async (req, res) => {
       await aiChat(res, [
         { role: 'system', content: 'Eres un asesor de salud y nutrición prudente, claro y directo. Nunca das diagnóstico médico, solo orientación general de estilo de vida.' },
         { role: 'user', content: prompt },
-      ]);
+      ], aiOpts);
       return;
     }
 

@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>procrastin-out</title>
+<style>
+  * { margin: 0; box-sizing: border-box; }
+  body {
+    width: 100vw; height: 100vh;
+    background: linear-gradient(180deg, #0D251C, #163A2B);
+    overflow: hidden;
+    position: relative;
+  }
+  .halo {
+    position: absolute;
+    width: clamp(280px, 46vmin, 560px); height: clamp(280px, 46vmin, 560px); border-radius: 50%;
+    background: rgba(230, 126, 34, 0.25);
+    filter: blur(72px);
+  }
+  .halo.tl { top: calc(-0.24 * clamp(280px, 46vmin, 560px)); left: calc(-0.24 * clamp(280px, 46vmin, 560px)); }
+  .halo.tr { top: calc(-0.24 * clamp(280px, 46vmin, 560px)); right: calc(-0.24 * clamp(280px, 46vmin, 560px)); }
+  .halo.bl { bottom: calc(-0.24 * clamp(280px, 46vmin, 560px)); left: calc(-0.24 * clamp(280px, 46vmin, 560px)); }
+  .halo.br { bottom: calc(-0.24 * clamp(280px, 46vmin, 560px)); right: calc(-0.24 * clamp(280px, 46vmin, 560px)); }
+  .halo.center { top: 44%; left: 50%; transform: translate(-50%, -50%); background: rgba(230, 126, 34, 0.25); width: clamp(360px, 62vmin, 760px); height: clamp(280px, 48vmin, 600px); border-radius: 50%; }
+  .mark {
+    position: absolute; top: 45%; left: 50%;
+    transform: translate(-50%, -50%);
+    width: min(52vmin, 620px);
+  }
+  .mark img { width: 100%; height: auto; display: block; }
+  .label {
+    position: absolute; top: 62%; left: 50%; transform: translateX(-50%);
+    width: min(60vmin, 560px);
+  }
+  .label img { width: 100%; height: auto; display: block; }
+</style>
+</head>
+<body>
+  <div class="halo tl"></div>
+  <div class="halo tr"></div>
+  <div class="halo bl"></div>
+  <div class="halo br"></div>
+  <div class="halo center"></div>
+  <div class="mark"><img src="mark-real.png" alt=""></div>
+  <div class="label"><img src="label-real.png" alt=""></div>
+</body>
+</html>

@@ -1,0 +1,308 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<title>Ronda 2 de logo — procrastin-out</title>
+<style>
+  body { margin: 0; font-family: system-ui, sans-serif; background: #f4efe9; color: #14110f; padding: 32px; }
+  h1 { font-size: 22px; margin: 0 0 6px; }
+  .sub { color: #6b625b; font-size: 14px; margin: 0 0 24px; }
+  h2 { font-size: 16px; margin: 32px 0 12px; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 20px; }
+  .card { background: #fff; border-radius: 20px; padding: 22px; box-shadow: 0 8px 24px rgba(0,0,0,.08); }
+  .card.ref { outline: 2px dashed #b8aea5; }
+  .card.fusion { outline: 2px solid #ff5b36; }
+  .row { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
+  .big svg { width: 170px; height: 170px; }
+  .small svg { width: 48px; height: 48px; }
+  .label { font-weight: 700; margin: 0 0 12px; }
+  p.note { color: #6b625b; font-size: 13px; margin: 12px 0 0; }
+</style>
+</head>
+<body>
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true">
+    <symbol id="d0" viewBox="0 0 512 512">
+      <rect width="512" height="512" rx="112" fill="#14110f"/>
+      <path d="M397 205.7 A150 150 0 1 1 307.3 115" stroke="#fff" stroke-width="64" fill="none"/>
+      <circle cx="408" cy="104" r="36" fill="#ff5b36"/>
+    </symbol>
+    <symbol id="d1" viewBox="0 0 512 512">
+      <rect width="512" height="512" rx="112" fill="#14110f"/>
+      <path d="M410.5 214.6 A160 160 0 1 1 297.4 101.5" stroke="#fff" stroke-width="40" fill="none"/>
+      <circle cx="419" cy="93" r="30" fill="#ff5b36"/>
+    </symbol>
+    <symbol id="d2" viewBox="0 0 512 512">
+      <rect width="512" height="512" rx="112" fill="#ff5b36"/>
+      <path d="M397 205.7 A150 150 0 1 1 307.3 115" stroke="#14110f" stroke-width="64" fill="none"/>
+      <circle cx="408" cy="104" r="36" fill="#fff"/>
+    </symbol>
+    <symbol id="d3" viewBox="0 0 512 512">
+      <rect width="512" height="512" rx="112" fill="#14110f"/>
+      <path d="M397 205.7 A150 150 0 1 1 307.3 115" stroke="#fff" stroke-width="64" fill="none"/>
+      <circle cx="408" cy="104" r="32" fill="#ff5b36"/>
+      <circle cx="444" cy="68" r="18" fill="#ff5b36" fill-opacity="0.6"/>
+      <circle cx="470" cy="42" r="10" fill="#ff5b36" fill-opacity="0.35"/>
+    </symbol>
+    <symbol id="f1" viewBox="0 0 512 512">
+      <rect width="512" height="512" rx="112" fill="#14110f"/>
+      <g transform="translate(61 120)" stroke="#ff5b36" stroke-width="46" stroke-opacity="0.3" fill="none"><path d="M0 0 L150 136 L0 272"/></g>
+      <g transform="translate(181 120)" stroke="#ff5b36" stroke-width="46" stroke-opacity="0.6" fill="none"><path d="M0 0 L150 136 L0 272"/></g>
+      <g transform="translate(301 120)" stroke="#ff5b36" stroke-width="46" fill="none"><path d="M0 0 L150 136 L0 272"/></g>
+    </symbol>
+    <symbol id="f2" viewBox="0 0 512 512">
+      <rect width="512" height="512" rx="112" fill="#ff5b36"/>
+      <g transform="translate(46 120)" fill="#14110f" fill-opacity="0.3"><polygon points="0,0 50,0 150,136 50,272 0,272 100,136"/></g>
+      <g transform="translate(181 120)" fill="#14110f" fill-opacity="0.6"><polygon points="0,0 50,0 150,136 50,272 0,272 100,136"/></g>
+      <g transform="translate(316 120)" fill="#14110f"><polygon points="0,0 50,0 150,136 50,272 0,272 100,136"/></g>
+    </symbol>
+    <symbol id="f3" viewBox="0 0 512 512">
+      <rect width="512" height="512" rx="112" fill="#14110f"/>
+      <g transform="translate(85 100) scale(1.15)" fill="#ff5b36"><polygon points="0,0 50,0 150,136 50,272 0,272 100,136"/></g>
+      <g transform="translate(255 100) scale(1.15)" fill="#ff5b36"><polygon points="0,0 50,0 150,136 50,272 0,272 100,136"/></g>
+    </symbol>
+    <symbol id="g1" viewBox="0 0 512 512">
+      <rect width="512" height="512" rx="112" fill="#14110f"/>
+      <path d="M397 205.7 A150 150 0 1 1 307.3 115" stroke="#fff" stroke-width="64" fill="none"/>
+      <g transform="translate(408 104) rotate(-45)"><polygon points="-22,-30 -6,-30 22,0 -6,30 -22,30 8,0" fill="#ff5b36"/></g>
+    </symbol>
+    <symbol id="g2" viewBox="0 0 512 512">
+      <rect width="512" height="512" rx="112" fill="#14110f"/>
+      <path d="M397 205.7 A150 150 0 1 1 307.3 115" stroke="#fff" stroke-width="64" fill="none"/>
+      <g transform="translate(169 188) scale(0.5)" fill="#ff5b36" fill-opacity="0.3"><polygon points="0,0 50,0 150,136 50,272 0,272 100,136"/></g>
+      <g transform="translate(219 188) scale(0.5)" fill="#ff5b36" fill-opacity="0.6"><polygon points="0,0 50,0 150,136 50,272 0,272 100,136"/></g>
+      <g transform="translate(269 188) scale(0.5)" fill="#ff5b36"><polygon points="0,0 50,0 150,136 50,272 0,272 100,136"/></g>
+    </symbol>
+    <symbol id="g3" viewBox="0 0 512 512">
+      <rect width="512" height="512" rx="112" fill="#14110f"/>
+      <path d="M397 205.7 A150 150 0 1 1 307.3 115" stroke="#fff" stroke-width="60" fill="none"/>
+      <g transform="translate(424 92) rotate(-45)"><path d="M-62 -40 L0 0 L-62 40" stroke="#ff5b36" stroke-width="40" fill="none"/></g>
+    </symbol>
+    <symbol id="g4" viewBox="0 0 512 512">
+      <rect width="512" height="512" rx="112" fill="#fff"/>
+      <path d="M397 205.7 A150 150 0 1 1 307.3 115" stroke="#14110f" stroke-width="64" fill="none"/>
+      <g transform="translate(424 92) rotate(-45)"><path d="M-62 -40 L0 0 L-62 40" stroke="#ff5b36" stroke-width="40" fill="none"/></g>
+    </symbol>
+    <symbol id="g6" viewBox="0 0 512 512">
+      <rect width="512" height="512" rx="112" fill="#14110f"/>
+      <path d="M397 205.7 A150 150 0 1 1 307.3 115" stroke="#fff" stroke-width="60" fill="none"/>
+      <g transform="translate(424 92) rotate(-45)"><path d="M-62 -40 L0 0 L-62 40" stroke="#ff5b36" stroke-width="40" stroke-linejoin="miter" fill="none"/></g>
+    </symbol>
+    <symbol id="g5" viewBox="0 0 512 512">
+      <rect width="512" height="512" rx="112" fill="#14110f"/>
+      <path d="M397 205.7 A150 150 0 1 1 307.3 115" stroke="#fff" stroke-width="56" fill="none"/>
+      <path d="M316 186 L400 102" stroke="#ff5b36" stroke-width="32" stroke-linecap="round" fill="none"/>
+      <polygon points="448,52 433.9,122.7 377.3,66.1" fill="#ff5b36"/>
+    </symbol>
+    <symbol id="h1" viewBox="0 0 512 512">
+      <rect width="512" height="512" rx="112" fill="#14110f"/>
+      <path d="M371.3 220.5 C349.4 192.6 291.2 203.2 256 256 C212 190 132 190 132 256 C132 322 212 322 256 256 C300 322 380 322 380 256" stroke="#fff" stroke-width="52" fill="none"/>
+      <g transform="translate(468 172) rotate(-45)"><path d="M-62 -40 L0 0 L-62 40" stroke="#ff5b36" stroke-width="40" stroke-linejoin="miter" fill="none"/></g>
+    </symbol>
+    <symbol id="h2" viewBox="0 0 512 512">
+      <rect width="512" height="512" rx="112" fill="#14110f"/>
+      <path d="M361.5 214.4 C335.2 195.9 286.8 209.8 256 256 C212 190 132 190 132 256 C132 322 212 322 256 256 C300 322 380 322 380 256" stroke="#fff" stroke-width="22" fill="none"/>
+      <g transform="translate(450 180) rotate(-45)"><path d="M-50 -34 L0 0 L-50 34" stroke="#ff5b36" stroke-width="14" stroke-linejoin="miter" fill="none"/></g>
+    </symbol>
+    <symbol id="h3" viewBox="0 0 512 512">
+      <rect width="512" height="512" rx="112" fill="#14110f"/>
+      <path d="M361.5 214.4 C335.2 195.9 286.8 209.8 256 256 C212 190 132 190 132 256 C132 322 212 322 256 256 C300 322 380 322 380 256" stroke="#ff5b36" stroke-width="36" fill="none"/>
+      <path d="M361.5 214.4 C335.2 195.9 286.8 209.8 256 256 C212 190 132 190 132 256 C132 322 212 322 256 256 C300 322 380 322 380 256" stroke="#fff" stroke-width="16" fill="none"/>
+      <g transform="translate(450 180) rotate(-45)"><path d="M-50 -34 L0 0 L-50 34" stroke="#ff5b36" stroke-width="14" stroke-linejoin="miter" fill="none"/></g>
+    </symbol>
+    <symbol id="h7" viewBox="0 0 512 512">
+      <rect width="512" height="512" rx="112" fill="#14110f"/>
+      <g transform="translate(256 256) rotate(-8) scale(0.9) translate(-256 -256)">
+        <path d="M392 256 C392 220 424 184 458 140" stroke="#ff5b36" stroke-width="24" stroke-linecap="round" fill="none"/>
+        <path d="M418 145 L458 140 L453 180" stroke="#ff5b36" stroke-width="24" stroke-linejoin="miter" stroke-linecap="butt" fill="none"/>
+        <path d="M392 256 C392 196 296 196 256 256 C216 316 130 316 130 256 C130 196 226 196 256 256 C286 316 392 316 392 256" stroke="#fff" stroke-width="24" stroke-linecap="round" fill="none"/>
+      </g>
+    </symbol>
+    <symbol id="h8" viewBox="0 0 512 512">
+      <rect width="512" height="512" rx="112" fill="#14110f"/>
+      <g transform="translate(256 256) scale(0.84) translate(-261 -256)">
+        <path d="M392 256 L478 170" stroke="#ff5b36" stroke-width="12" stroke-linecap="round" fill="none"/>
+        <g transform="translate(420 228) rotate(-45)"><path d="M-18 -15 L0 0 L-18 15" stroke="#ff5b36" stroke-width="12" stroke-linejoin="miter" fill="none"/></g>
+        <g transform="translate(466 182) rotate(-45)"><path d="M-18 -15 L0 0 L-18 15" stroke="#ff5b36" stroke-width="12" stroke-linejoin="miter" fill="none"/></g>
+        <path d="M392 256 C392 196 296 196 256 256 C216 316 130 316 130 256 C130 196 226 196 256 256 C286 316 392 316 392 256" stroke="#fff" stroke-width="24" stroke-linecap="round" fill="none"/>
+      </g>
+    </symbol>
+    <symbol id="h9" viewBox="0 0 512 512">
+      <rect width="512" height="512" rx="112" fill="#14110f"/>
+      <g transform="translate(256 256) scale(0.84) translate(-261 -256)">
+        <path d="M392 256 C392 196 296 196 256 256 C216 316 130 316 130 256 C130 196 226 196 256 256 C280 304 352.6 313.6 380.7 284.8" stroke="#fff" stroke-width="24" stroke-linecap="butt" fill="none"/>
+        <g transform="translate(412 236) rotate(-45)"><path d="M-22 -17 L0 0 L-22 17" stroke="#ff5b36" stroke-width="14" stroke-linejoin="miter" fill="none"/></g>
+        <g transform="translate(452 196) rotate(-45)"><path d="M-22 -17 L0 0 L-22 17" stroke="#ff5b36" stroke-width="14" stroke-linejoin="miter" fill="none"/></g>
+      </g>
+    </symbol>
+    <symbol id="h10" viewBox="0 0 512 512">
+      <rect width="512" height="512" rx="112" fill="#14110f"/>
+      <g transform="translate(256 256) scale(0.84) translate(-256 -256)">
+        <path d="M361.5 214.4 C335.2 195.9 286.8 209.8 256 256 C212 190 132 190 132 256 C132 322 212 322 256 256 C300 322 380 322 380 256" stroke="#fff" stroke-width="24" stroke-linecap="butt" fill="none"/>
+        <g transform="translate(424 210) rotate(-45)"><path d="M-30 -23 L0 0 L-30 23" stroke="#ff5b36" stroke-width="18" stroke-linejoin="miter" fill="none"/></g>
+        <g transform="translate(462 172) rotate(-45)"><path d="M-30 -23 L0 0 L-30 23" stroke="#ff5b36" stroke-width="18" stroke-linejoin="miter" fill="none"/></g>
+      </g>
+    </symbol>
+    <symbol id="h4" viewBox="0 0 512 512">
+      <rect width="512" height="512" rx="112" fill="#14110f"/>
+      <path d="M361.5 214.4 C335.2 195.9 286.8 209.8 256 256 C212 190 132 190 132 256 C132 322 212 322 256 256 C300 322 380 322 380 256" stroke="#fff" stroke-width="22" fill="none"/>
+      <path d="M376 232 L436 172" stroke="#ff5b36" stroke-width="12" stroke-linecap="butt" fill="none"/>
+      <g transform="translate(450 158) rotate(-45)"><path d="M-34 -26 L0 0 L-34 26" stroke="#ff5b36" stroke-width="12" stroke-linejoin="miter" fill="none"/></g>
+    </symbol>
+    <symbol id="h5" viewBox="0 0 512 512">
+      <rect width="512" height="512" rx="112" fill="#14110f"/>
+      <g transform="translate(256 256) scale(0.84) translate(-256 -256)">
+        <path d="M361.5 214.4 C335.2 195.9 286.8 209.8 256 256 C212 190 132 190 132 256 C132 322 212 322 256 256 C300 322 380 322 380 256" stroke="#fff" stroke-width="24" fill="none"/>
+        <g transform="translate(450 180) rotate(-45)"><path d="M-50 -34 L0 0 L-50 34" stroke="#ff5b36" stroke-width="15" stroke-linejoin="miter" fill="none"/></g>
+      </g>
+    </symbol>
+    <symbol id="h6" viewBox="0 0 512 512">
+      <rect width="512" height="512" rx="112" fill="#14110f"/>
+      <path d="M361.5 214.4 C335.2 195.9 286.8 209.8 256 256 C212 190 132 190 132 256 C132 322 212 322 256 256 C300 322 380 322 380 256" stroke="#ff5b36" stroke-width="28" fill="none"/>
+      <path d="M361.5 214.4 C335.2 195.9 286.8 209.8 256 256 C212 190 132 190 132 256 C132 322 212 322 256 256 C300 322 380 322 380 256" stroke="#14110f" stroke-width="16" fill="none"/>
+      <path d="M361.5 214.4 C335.2 195.9 286.8 209.8 256 256 C212 190 132 190 132 256 C132 322 212 322 256 256 C300 322 380 322 380 256" stroke="#fff" stroke-width="8" fill="none"/>
+      <g transform="translate(450 180) rotate(-45)"><path d="M-50 -34 L0 0 L-50 34" stroke="#ff5b36" stroke-width="14" stroke-linejoin="miter" fill="none"/></g>
+    </symbol>
+  </svg>
+
+  <h1>Ronda 2 · D, F y fusiones</h1>
+  <p class="sub">La D original queda de referencia (borde punteado). Las fusiones van con borde naranja.</p>
+
+  <h2>Referencia</h2>
+  <div class="grid">
+    <div class="card ref"><p class="label">D original</p>
+      <div class="row big"><svg><use href="#d0"/></svg></div></div>
+  </div>
+
+  <h2>Variantes de D</h2>
+  <div class="grid">
+    <div class="card"><p class="label">D1 · Fina</p>
+      <div class="row big"><svg><use href="#d1"/></svg></div>
+      <div class="row small" style="margin-top:12px"><svg><use href="#d1"/></svg><svg><use href="#d1"/></svg></div>
+      <p class="note">Anillo más delgado, brecha más amplia y punto más chico.</p></div>
+    <div class="card"><p class="label">D2 · Sólida</p>
+      <div class="row big"><svg><use href="#d2"/></svg></div>
+      <div class="row small" style="margin-top:12px"><svg><use href="#d2"/></svg><svg><use href="#d2"/></svg></div>
+      <p class="note">Fondo naranja, anillo oscuro y punto blanco que se escapa.</p></div>
+    <div class="card"><p class="label">D3 · Estela</p>
+      <div class="row big"><svg><use href="#d3"/></svg></div>
+      <div class="row small" style="margin-top:12px"><svg><use href="#d3"/></svg><svg><use href="#d3"/></svg></div>
+      <p class="note">El punto deja tres puntos más chicos detrás: movimiento.</p></div>
+  </div>
+
+  <h2>Variantes de F</h2>
+  <div class="grid">
+    <div class="card"><p class="label">F1 · Trazos</p>
+      <div class="row big"><svg><use href="#f1"/></svg></div>
+      <div class="row small" style="margin-top:12px"><svg><use href="#f1"/></svg><svg><use href="#f1"/></svg></div>
+      <p class="note">Tres chevrons en trazo que se encienden de a uno.</p></div>
+    <div class="card"><p class="label">F2 · Invertida</p>
+      <div class="row big"><svg><use href="#f2"/></svg></div>
+      <div class="row small" style="margin-top:12px"><svg><use href="#f2"/></svg><svg><use href="#f2"/></svg></div>
+      <p class="note">Fondo naranja con chevrons oscuros que se aclaran hacia la derecha.</p></div>
+    <div class="card"><p class="label">F3 · Dos</p>
+      <div class="row big"><svg><use href="#f3"/></svg></div>
+      <div class="row small" style="margin-top:12px"><svg><use href="#f3"/></svg><svg><use href="#f3"/></svg></div>
+      <p class="note">Solo dos chevrons grandes: lo más simple y lo más fácil de leer.</p></div>
+  </div>
+
+  <h2>Fusiones D + F</h2>
+  <div class="grid">
+    <div class="card fusion"><p class="label">G1 · Anillo con flecha</p>
+      <div class="row big"><svg><use href="#g1"/></svg></div>
+      <div class="row small" style="margin-top:12px"><svg><use href="#g1"/></svg><svg><use href="#g1"/></svg></div>
+      <p class="note">El punto de D se convierte en chevron: el anillo deja salir la flecha.</p></div>
+    <div class="card fusion"><p class="label">G2 · Anillo con chevrons</p>
+      <div class="row big"><svg><use href="#g2"/></svg></div>
+      <div class="row small" style="margin-top:12px"><svg><use href="#g2"/></svg><svg><use href="#g2"/></svg></div>
+      <p class="note">Tres chevrons dentro del anillo abierto: avance dentro de la fuga.</p></div>
+  </div>
+
+  <h2>Ronda 3 · Variantes de G1</h2>
+  <div class="grid">
+    <div class="card fusion"><p class="label">G3 · Flecha gruesa</p>
+      <div class="row big"><svg><use href="#g3"/></svg></div>
+      <div class="row small" style="margin-top:12px"><svg><use href="#g3"/></svg><svg><use href="#g3"/></svg></div>
+      <p class="note">Chevron más grueso y anillo más ancho: se lee mejor en tamaño chico.</p></div>
+    <div class="card fusion"><p class="label">G4 · Invertida</p>
+      <div class="row big"><svg><use href="#g4"/></svg></div>
+      <div class="row small" style="margin-top:12px"><svg><use href="#g4"/></svg><svg><use href="#g4"/></svg></div>
+      <p class="note">Fondo claro, anillo oscuro y flecha naranja.</p></div>
+    <div class="card fusion"><p class="label">G5 · Flecha que sale</p>
+      <div class="row big"><svg><use href="#g5"/></svg></div>
+      <div class="row small" style="margin-top:12px"><svg><use href="#g5"/></svg><svg><use href="#g5"/></svg></div>
+      <p class="note">Vástago y punta de flecha que salen por la brecha del anillo.</p></div>
+  </div>
+
+  <h2>Ronda 4 · Mezcla G1 + G3</h2>
+  <div class="grid">
+    <div class="card fusion"><p class="label">G6 · Mezcla</p>
+      <div class="row big"><svg><use href="#g6"/></svg></div>
+      <div class="row small" style="margin-top:12px"><svg><use href="#g6"/></svg><svg><use href="#g6"/></svg></div>
+      <p class="note">Anillo grueso de G1 con el chevrón abierto de G3: se lee como flecha también en tamaño chico.</p></div>
+  </div>
+
+  <h2>Ronda 5 · Infinito con salida</h2>
+  <div class="grid">
+    <div class="card fusion"><p class="label">H1 · Infinito con salida</p>
+      <div class="row big"><svg><use href="#h1"/></svg></div>
+      <div class="row small" style="margin-top:12px"><svg><use href="#h1"/></svg><svg><use href="#h1"/></svg></div>
+      <p class="note">El loop de la procrastinación se rompe en un lado y la flecha sale hacia afuera.</p></div>
+  </div>
+
+  <h2>Ronda 6 · Infinito más delicado</h2>
+  <div class="grid">
+    <div class="card fusion"><p class="label">H2 · Fina</p>
+      <div class="row big"><svg><use href="#h2"/></svg></div>
+      <div class="row small" style="margin-top:12px"><svg><use href="#h2"/></svg><svg><use href="#h2"/></svg></div>
+      <p class="note">Línea más fina y hueco más amplio; la flecha es un chevrón delgado.</p></div>
+    <div class="card fusion"><p class="label">H3 · Contorno</p>
+      <div class="row big"><svg><use href="#h3"/></svg></div>
+      <div class="row small" style="margin-top:12px"><svg><use href="#h3"/></svg><svg><use href="#h3"/></svg></div>
+      <p class="note">Línea blanca fina dentro de un contorno naranja.</p></div>
+    <div class="card fusion"><p class="label">H4 · Vástago</p>
+      <div class="row big"><svg><use href="#h4"/></svg></div>
+      <div class="row small" style="margin-top:12px"><svg><use href="#h4"/></svg><svg><use href="#h4"/></svg></div>
+      <p class="note">La flecha sale por el hueco con un vástago fino y punta.</p></div>
+    <div class="card fusion"><p class="label">H5 · Centrada</p>
+      <div class="row big"><svg><use href="#h5"/></svg></div>
+      <div class="row small" style="margin-top:12px"><svg><use href="#h5"/></svg><svg><use href="#h5"/></svg></div>
+      <p class="note">El infinito más chico y centrado, con más aire alrededor.</p></div>
+    <div class="card fusion"><p class="label">H6 · Doble contorno</p>
+      <div class="row big"><svg><use href="#h6"/></svg></div>
+      <div class="row small" style="margin-top:12px"><svg><use href="#h6"/></svg><svg><use href="#h6"/></svg></div>
+      <p class="note">Contorno naranja, línea oscura y un filo blanco en el centro.</p></div>
+  </div>
+
+  <h2>Ronda 7 · H2 estilizada</h2>
+  <div class="grid">
+    <div class="card fusion"><p class="label">H7 · Ondera</p>
+      <div class="row big"><svg><use href="#h7"/></svg></div>
+      <div class="row small" style="margin-top:12px"><svg><use href="#h7"/></svg><svg><use href="#h7"/></svg></div>
+      <p class="note">Infinito inclinado y más curvo; la flecha naranja sale del aro derecho como una cola.</p></div>
+  </div>
+
+  <h2>Ronda 8 · H5 con doble flecha</h2>
+  <div class="grid">
+    <div class="card fusion"><p class="label">H8 · Doble flecha</p>
+      <div class="row big"><svg><use href="#h8"/></svg></div>
+      <div class="row small" style="margin-top:12px"><svg><use href="#h8"/></svg><svg><use href="#h8"/></svg></div>
+      <p class="note">Infinito centrado como H5; la cola sale del aro derecho con dos chevrones sobre la misma línea.</p></div>
+  </div>
+
+  <h2>Ronda 9 · Infinito abierto</h2>
+  <div class="grid">
+    <div class="card fusion"><p class="label">H9 · Abierto doble</p>
+      <div class="row big"><svg><use href="#h9"/></svg></div>
+      <div class="row small" style="margin-top:12px"><svg><use href="#h9"/></svg><svg><use href="#h9"/></svg></div>
+      <p class="note">Infinito abierto en el lado derecho; dos chevrones naranjas salen de la abertura.</p></div>
+  </div>
+
+  <h2>Ronda 10 · H5 abierta con doble flecha</h2>
+  <div class="grid">
+    <div class="card fusion"><p class="label">H10 · H5 doble</p>
+      <div class="row big"><svg><use href="#h10"/></svg></div>
+      <div class="row small" style="margin-top:12px"><svg><use href="#h10"/></svg><svg><use href="#h10"/></svg></div>
+      <p class="note">Infinito de H5 centrado y abierto; dos chevrones naranjas salen de la abertura.</p></div>
+  </div>
+</body>
+</html>

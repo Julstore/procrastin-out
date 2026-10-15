@@ -175,6 +175,8 @@ async function putData(body, opts = {}) {
 function today() { return new Date().toISOString().slice(0, 10); }
 function uid() { return Math.random().toString(36).slice(2, 10) + Date.now().toString(36).slice(-4); }
 function esc(s) { return String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])); }
+// Solo links http(s) van a un href: un feed podría traer javascript: o data:
+function safeHref(u) { return /^https?:\/\//i.test(String(u || '')) ? u : '#'; }
 function fmtDate(d) {
   if (!d) return '';
   const days = ['dom', 'lun', 'mar', 'mié', 'jue', 'vie', 'sáb'];
@@ -258,22 +260,174 @@ function habitWeekDays(offset) {
   });
 }
 
+// ---------- Pestañas: carrusel en bucle infinito (derecha → izquierda) ----------
+let tabPos = 0, tabSetW = 0, tabLast = 0, tabTween = null, tabHoldUntil = 0, tabHover = false;
+const TAB_SPEED = 26; // px por segundo del desplazamiento automático
+function setTabActive(name) {
+  $$('#tabsTrack [data-tab]').forEach(b => {
+    const on = b.dataset.tab === name;
+    b.classList.toggle('active', on);
+    b.setAttribute('aria-selected', on ? 'true' : 'false');
+  });
+}
+function tabWrap(p) { return tabSetW > 0 ? ((p % tabSetW) + tabSetW) % tabSetW : 0; }
+// Arma el bucle: copias de las pestañas a la derecha hasta cubrir el ancho visible
+function buildTabLoop() {
+  const track = $('#tabsTrack');
+  track.querySelectorAll('[data-clone]').forEach(n => n.remove());
+  const base = [...track.querySelectorAll('[data-tab]')];
+  const n = base.length;
+  const addSet = () => base.forEach(b => {
+    const c = b.cloneNode(true);
+    c.dataset.clone = '1';
+    c.setAttribute('aria-hidden', 'true');
+    c.tabIndex = -1;
+    track.appendChild(c);
+  });
+  addSet();
+  tabSetW = track.children[n].offsetLeft - track.children[0].offsetLeft;
+  while (tabSetW > 0 && track.scrollWidth < track.clientWidth + tabSetW) addSet();
+  tabPos = tabWrap(tabPos);
+}
+function tabFrame(ts) {
+  const track = $('#tabsTrack');
+  const dt = Math.min(ts - (tabLast || ts), 64) / 1000;
+  tabLast = ts;
+  if (tabTween) {
+    const k = Math.max(0, Math.min(1, (ts - tabTween.t0) / tabTween.dur));
+    tabPos = tabTween.from + (tabTween.to - tabTween.from) * (1 - Math.pow(1 - k, 3));
+    if (k >= 1) tabTween = null;
+  } else if (!tabHover && ts >= tabHoldUntil && !window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+    tabPos += TAB_SPEED * dt;
+  }
+  tabPos = tabWrap(tabPos);
+  track.scrollLeft = tabPos;
+  requestAnimationFrame(tabFrame);
+}
+function tabHold() { tabHoldUntil = performance.now() + 1500; }
+function tabNudge(dir) {
+  const n = $$('#tabsTrack [data-tab]:not([data-clone])').length || 1;
+  const step = tabSetW / n * 2; // avanza dos pestañas
+  tabTween = { from: tabPos, to: tabPos + dir * step, t0: performance.now(), dur: 420 };
+  tabHold();
+}
+function initTabs() {
+  const track = $('#tabsTrack');
+  setTabActive(tab);
+  buildTabLoop();
+  track.addEventListener('click', e => {
+    const b = e.target.closest('[data-tab]');
+    if (!b) return;
+    tab = b.dataset.tab;
+    setTabActive(tab);
+    render();
+  });
+  track.addEventListener('pointerenter', e => { if (e.pointerType === 'mouse') tabHover = true; });
+  track.addEventListener('pointerleave', () => { tabHover = false; });
+  track.addEventListener('pointerdown', () => { tabHover = true; tabTween = null; });
+  track.addEventListener('pointerup', () => { tabHover = false; tabHold(); });
+  track.addEventListener('pointercancel', () => { tabHover = false; tabHold(); });
+  track.addEventListener('wheel', tabHold, { passive: true });
+  track.addEventListener('scroll', () => {
+    // desplazamiento manual (rueda, dedo, barra): se adopta como nueva posición
+    if (Math.abs(track.scrollLeft - tabPos) > 2) { tabPos = track.scrollLeft; tabTween = null; }
+  }, { passive: true });
+  $('#tabPrev').onclick = () => tabNudge(-1);
+  $('#tabNext').onclick = () => tabNudge(1);
+  window.addEventListener('resize', buildTabLoop);
+  if (document.fonts) document.fonts.ready.then(buildTabLoop);
+  requestAnimationFrame(tabFrame);
+}
+
 // ---------- Render ----------
 function render() {
   document.body.dataset.tab = tab;
   const app = $('#app');
-  const views = { tasks: viewTasks, habits: viewHabits, health: viewHealth, meals: viewMeals, commitments: viewCommitments, finances: viewFinances, learning: viewLearning, projects: viewProjects, news: viewNews, rewards: viewRewards };
+  const views = { tasks: viewTasks, habits: viewHabits, health: viewHealth, meals: viewMeals, commitments: viewCommitments, finances: viewFinances, learning: viewLearning, projects: viewProjects, news: viewNews, rewards: viewRewards, shopping: viewShopping };
   app.innerHTML = `<section>${(views[tab] || viewTasks)()}</section>`;
   bind();
 }
 
 
+// ---------- Planes semanales ----------
+// La semana es un plan FIJADO: guarda los ids al crearla, así agregar tareas nuevas no baja su %.
+function activeWeek() { return (D.weeks || []).find(w => w.status !== 'done'); }
+function pastWeeks() { return (D.weeks || []).filter(w => w.status === 'done'); }
+function weekTasks(w) { return (w.taskIds || []).map(id => D.tasks.find(t => t.id === id)).filter(Boolean); }
+function weekPct(w) {
+  const ts = weekTasks(w);
+  if (!ts.length) return 0;
+  return Math.round(ts.filter(t => t.done).length / ts.length * 100);
+}
+function weekPanel() {
+  const w = activeWeek();
+  if (!w) {
+    const pend = D.tasks.filter(t => !t.done).length;
+    return `<div class="card due-panel">
+      <div class="row" style="justify-content:space-between;flex-wrap:wrap;gap:8px">
+        <strong>📅 Plan de la semana</strong>
+        <button class="btn small" onclick="createWeek()" ${pend ? '' : 'disabled'}>➕ Armar mi semana${pend ? ` (${pend} pendientes)` : ''}</button>
+      </div>
+      <p class="meta">Fija las tareas de esta semana: su % ya no baja cuando agregues tareas nuevas. Al completarla toda, la reclamas y suma XP extra.</p>
+      ${pastWeeks().length ? `<div class="meta">Semanas cerradas: ${pastWeeks().map(x => `✅ ${esc(x.title)}`).join(' · ')}</div>` : ''}
+    </div>`;
+  }
+  const ts = weekTasks(w);
+  const pct = weekPct(w);
+  const m = moodFor(pct);
+  const allDone = ts.length > 0 && ts.every(t => t.done);
+  return `<div class="card due-panel">
+    <div class="row" style="justify-content:space-between;flex-wrap:wrap;gap:8px">
+      <strong>📅 ${esc(w.title)}</strong>
+      <span class="meta" style="color:${m.col};font-weight:800">${m.emoji} ${pct}%</span>
+    </div>
+    <div class="progress-bar" style="margin:8px 0"><div style="width:${pct}%;background:linear-gradient(90deg, ${m.col}, ${m.col2})"></div></div>
+    ${allDone
+      ? `<div class="row" style="gap:8px;flex-wrap:wrap"><span>🎉 <strong>¡Semana completa!</strong></span><button class="btn small" onclick="claimWeek('${w.id}')">✅ Cerrar semana (+XP)</button></div>`
+      : `<p class="meta">${ts.filter(t => t.done).length}/${ts.length} tareas · el check pasa de 🔴 a 🟢 a medida que cumplís</p>`}
+    ${ts.map(t => `
+      <div class="row" style="gap:8px;margin-top:4px">
+        <input type="checkbox" ${t.done ? 'checked' : ''} onchange="patch('tasks','${t.id}',{done:${t.done ? 'false' : 'true'}})">
+        <span class="title" style="${t.done ? 'text-decoration:line-through;opacity:.6' : ''}">${esc(t.title)}</span>
+        <span class="priority ${t.priority}">${t.priority}</span>
+      </div>`).join('') || '<p class="meta">La semana quedó sin tareas (se eliminaron). Cerrala y armá una nueva.</p>'}
+    ${allDone ? '' : `<div class="row" style="justify-content:flex-end;margin-top:6px"><button class="btn ghost small" onclick="claimWeek('${w.id}',true)">Cerrar sin completar</button></div>`}
+  </div>`;
+}
+window.createWeek = async function () {
+  if (activeWeek()) return;
+  const pend = D.tasks.filter(t => !t.done);
+  if (!pend.length) return;
+  await addItem('weeks', { title: 'Semana del ' + fmtDate(today()), taskIds: pend.map(t => t.id), status: 'active', createdAt: new Date().toISOString() });
+};
+window.claimWeek = async function (id, partial) {
+  const w = (D.weeks || []).find(x => x.id === id);
+  if (!w) return;
+  if (!partial) {
+    const ts = weekTasks(w);
+    if (!ts.length || !ts.every(t => t.done)) { alert('Todavía faltan tareas de la semana.'); return; }
+  } else if (!confirm('¿Cerrar la semana sin completar todas las tareas? No da XP extra.')) return;
+  await patch('weeks', id, { status: 'done' });
+};
+window.addToWeek = async function (taskId) {
+  const w = activeWeek();
+  if (!w) return;
+  const ids = [...(w.taskIds || [])];
+  if (!ids.includes(taskId)) ids.push(taskId);
+  await patch('weeks', w.id, { taskIds: ids });
+};
+
 // ---------- Tareas ----------
 function viewTasks() {
-  const pending = D.tasks.filter(t => !t.done).sort((a, b) => {
+  const w = activeWeek();
+  const inWeek = new Set(w ? (w.taskIds || []) : []);
+  const sortT = (a, b) => {
     const p = { alta: 0, media: 1, baja: 2 };
     return (p[a.priority] ?? 1) - (p[b.priority] ?? 1) || (a.due || '9999').localeCompare(b.due || '9999');
-  });
+  };
+  const pending = D.tasks.filter(t => !t.done).sort(sortT);
+  const weekPending = pending.filter(t => inWeek.has(t.id));
+  const globalPending = pending.filter(t => !inWeek.has(t.id));
   const done = D.tasks.filter(t => t.done);
   return `
     <h2>✅ Tareas</h2>
@@ -300,17 +454,21 @@ function viewTasks() {
       <select id="t-area">${AREAS.map(a => `<option>${a}</option>`).join('')}</select>
       <button class="btn" onclick="addTask()">Añadir</button>
     </div>
-    ${pending.length ? '' : '<p class="meta">Nada pendiente. 🎉</p>'}
-    ${pending.map(t => `
+    ${weekPanel()}
+    <h3>🌍 Metas globales <span class="meta">(sin plazo semanal · también dan XP y suben de nivel)</span></h3>
+    ${globalPending.length ? '' : '<p class="meta">Nada fuera de la semana. 🎉</p>'}
+    ${globalPending.map(t => `
       <div class="card">
         <div class="row">
           <input type="checkbox" onchange="patch('tasks','${t.id}',{done:true})">
           <span class="title">${esc(t.title)}</span>
           <span class="priority ${t.priority}">${t.priority}</span>
           <span class="meta">${esc(t.area)}${t.due ? ' · 📅 ' + fmtDate(t.due) + (isOverdue(t.due) ? ' ⚠️' : '') : ''}</span>
+          ${w ? `<button class="btn ghost small" onclick="addToWeek('${t.id}')" title="Sumarla al plan de la semana">＋ semana</button>` : ''}
           <button class="icon-btn" onclick="del('tasks','${t.id}')">🗑</button>
         </div>
       </div>`).join('')}
+    ${weekPending.length ? `<p class="meta" style="margin-top:8px">📌 ${weekPending.length} pendiente(s) ya están en el plan de la semana (se tildan arriba).</p>` : ''}
     ${done.length ? `<h3>Completadas (${done.length})</h3>
       ${done.map(t => `
         <div class="card done">
@@ -438,6 +596,7 @@ var viewHealth = function () {
       }).join('')}
     </div>
 
+    ${viewSmoking()}
     <h3>Registro del día</h3>
     <div class="inline-add">
       <input type="date" id="m-date" value="${today()}">
@@ -466,6 +625,65 @@ var viewHealth = function () {
     <button class="btn ghost small" style="margin-top:6px" onclick="saveMeds()">Guardar nota</button>
   `;
 };
+// ---------- Consumo: tabaco y cannabis (salud) ----------
+function viewSmoking() {
+  const s = D.smoking || {};
+  if (!s.answered) {
+    return `<div class="card smoke-card">
+      <strong>🚬 ¿Fumás?</strong>
+      <p class="meta">Marcá lo que consumís. Si lo registrás por día, aparece en tus estadísticas de salud. Podés cambiarlo cuando quieras.</p>
+      <div class="row" style="gap:16px;flex-wrap:wrap;margin:8px 0">
+        <label><input type="checkbox" id="sm-tob" ${s.tobacco ? 'checked' : ''}> Tabaco</label>
+        <label><input type="checkbox" id="sm-can" ${s.cannabis ? 'checked' : ''}> Cannabis</label>
+      </div>
+      <p class="meta">Si no marcás nada, se guarda como "no fumo".</p>
+      <button class="btn" onclick="saveSmokingAnswer()">Guardar</button>
+    </div>`;
+  }
+  if (!s.tobacco && !s.cannabis) {
+    return `<div class="card smoke-card row" style="justify-content:space-between"><span class="meta">🚬 No fumás (según tu respuesta).</span><button class="btn ghost small" onclick="editSmoking()">Cambiar</button></div>`;
+  }
+  const log = s.log || {};
+  const t = today();
+  const days = Array.from({ length: 7 }, (_, i) => shiftDate(t, -i));
+  const avg = (key) => Math.round(days.reduce((acc, d) => acc + (+(log[d]?.[key]) || 0), 0) / 7 * 10) / 10;
+  const cur = log[t] || {};
+  return `<div class="card smoke-card">
+    <div class="row" style="justify-content:space-between;flex-wrap:wrap;gap:8px">
+      <strong>🚬 Consumo</strong>
+      <button class="btn ghost small" onclick="editSmoking()">Cambiar</button>
+    </div>
+    <div class="stats-grid">
+      ${s.tobacco ? `<div class="stat-card"><div class="num">${cur.cigarettes ?? 0}</div><div class="lbl">Cigarrillos hoy</div><div class="meta">Promedio 7 días: ${avg('cigarettes')}</div></div>` : ''}
+      ${s.cannabis ? `<div class="stat-card"><div class="num">${cur.joints ?? 0}</div><div class="lbl">Porros hoy</div><div class="meta">Promedio 7 días: ${avg('joints')}</div></div>` : ''}
+    </div>
+    <div class="inline-add">
+      ${s.tobacco ? `<label>Cigarrillos hoy<input type="number" id="sm-cig" min="0" value="${cur.cigarettes ?? ''}" placeholder="0" style="width:110px"></label>` : ''}
+      ${s.cannabis ? `<label>Porros hoy<input type="number" id="sm-joint" min="0" value="${cur.joints ?? ''}" placeholder="0" style="width:110px"></label>` : ''}
+      <button class="btn" onclick="saveSmokingDay()">Guardar día</button>
+    </div>
+    <table><tr><th>Fecha</th>${s.tobacco ? '<th class="amt">Cigarrillos</th>' : ''}${s.cannabis ? '<th class="amt">Porros</th>' : ''}</tr>
+      ${days.map(d => `<tr><td>${fmtDate(d)}</td>${s.tobacco ? `<td class="amt">${log[d]?.cigarettes ?? '—'}</td>` : ''}${s.cannabis ? `<td class="amt">${log[d]?.joints ?? '—'}</td>` : ''}</tr>`).join('')}
+    </table>
+  </div>`;
+}
+window.saveSmokingAnswer = async function () {
+  const s = D.smoking || {};
+  const smoking = { ...s, answered: true, tobacco: !!$('#sm-tob')?.checked, cannabis: !!$('#sm-can')?.checked, log: s.log || {} };
+  await putData({ smoking }, { silent: true });
+};
+window.editSmoking = async function () {
+  await putData({ smoking: { ...(D.smoking || {}), answered: false } }, { silent: true });
+};
+window.saveSmokingDay = async function () {
+  const s = D.smoking || {};
+  const t = today();
+  const entry = { ...((s.log || {})[t] || {}) };
+  if (s.tobacco) entry.cigarettes = Math.max(0, parseInt($('#sm-cig').value) || 0);
+  if (s.cannabis) entry.joints = Math.max(0, parseInt($('#sm-joint').value) || 0);
+  await putData({ smoking: { ...s, log: { ...(s.log || {}), [t]: entry } } });
+};
+
 window.setDayFocus = function (i, focus) {
   D.routine = D.routine || {};
   D.routine[i + '_focus'] = focus;
@@ -829,6 +1047,7 @@ function viewFinances() {
     <h3>Límites por categoría</h3>
     <div class="limits-grid">${CATEGORIES.map(c => `<label>${esc(c)}<input type="number" min="0" placeholder="Sin límite" value="${limits[c] ?? ''}" onchange="setCatLimit('${c}',this.value)"></label>`).join('')}</div>
     <p class="meta">⚠️ = límite superado · 👀 = cerca del límite (80%).</p>` : '<p class="meta">Sin gastos este mes: el gráfico aparece solo.</p>'}
+    ${viewWishlist()}
     <h3>Añadir gasto</h3>
     <div class="inline-add">
       <input type="number" id="e-amount" placeholder="Importe" style="width:110px">
@@ -869,6 +1088,88 @@ window.delExpense = async function (id) {
   if (!confirm('¿Eliminar gasto?')) return;
   D.finances.expenses = D.finances.expenses.filter(e => e.id !== id);
   await fetch('/api/data', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ finances: D.finances }) });
+  await reload();
+};
+
+// ---------- Lista de deseos (finanzas) ----------
+const PRIORITY_ORDER = { alta: 0, media: 1, baja: 2 };
+function viewWishlist() {
+  const items = (D.wishlist || []).slice().sort((a, b) => (a.bought - b.bought) || ((PRIORITY_ORDER[a.priority] ?? 1) - (PRIORITY_ORDER[b.priority] ?? 1)));
+  const pending = items.filter(w => !w.bought);
+  const total = pending.reduce((s, w) => s + (+w.price || 0), 0);
+  return `
+    <h3>🛍️ Lista de deseos</h3>
+    <div class="inline-add">
+      <input type="text" id="w-title" placeholder="Qué querés comprar" style="flex:1" onkeydown="if(event.key==='Enter')addWish()">
+      <input type="number" id="w-price" placeholder="Precio est." style="width:120px">
+      <select id="w-prio"><option value="alta">Alta</option><option value="media" selected>Media</option><option value="baja">Baja</option></select>
+      <button class="btn" onclick="addWish()">Añadir</button>
+    </div>
+    ${pending.length ? `<p class="meta">Pendientes: ${pending.length} · Total estimado: $${total.toLocaleString()}</p>` : ''}
+    ${items.map(w => `
+      <div class="card wish-row">
+        <div class="row" style="gap:8px;flex-wrap:wrap">
+          <input type="checkbox" ${w.bought ? 'checked' : ''} onchange="toggleWishBought('${w.id}', this.checked)" aria-label="Marcar como comprado">
+          <span class="title" style="${w.bought ? 'text-decoration:line-through;opacity:.6' : ''}">${esc(w.title)}</span>
+          <span class="priority ${esc(w.priority)}">${esc(w.priority)}</span>
+          <span class="meta">${w.price ? '$' + (+w.price).toLocaleString() : 'sin precio'}</span>
+          <button class="icon-btn" onclick="del('wishlist','${w.id}')" aria-label="Eliminar deseo">🗑</button>
+        </div>
+      </div>`).join('') || '<p class="meta">Sin deseos guardados. Anotá lo que querés comprar para decidir con calma.</p>'}
+  `;
+}
+window.addWish = async function () {
+  const title = $('#w-title').value.trim().slice(0, 120);
+  if (!title) return;
+  const price = Math.max(0, parseFloat($('#w-price').value) || 0);
+  await addItem('wishlist', { title, price, priority: $('#w-prio').value, bought: false, boughtAt: null, createdAt: new Date().toISOString() });
+};
+window.toggleWishBought = async function (id, checked) {
+  const w = (D.wishlist || []).find(x => x.id === id);
+  if (checked && w && w.price > 0 && confirm(`¿Registrar "${w.title}" como gasto de $${(+w.price).toLocaleString()} (categoría Otros)?`)) {
+    D.finances.expenses.push({ id: uid(), date: today(), category: 'Otros', description: w.title, amount: +w.price });
+    await putData({ finances: D.finances }, { silent: true });
+  }
+  await patch('wishlist', id, { bought: checked, boughtAt: checked ? today() : null });
+};
+
+// ---------- Lista de supermercado ----------
+function viewShopping() {
+  const items = D.shopping || [];
+  const pending = items.filter(i => !i.done);
+  const done = items.filter(i => i.done);
+  const row = (i) => `
+    <div class="card shop-row">
+      <div class="row" style="gap:8px">
+        <input type="checkbox" ${i.done ? 'checked' : ''} onchange="patch('shopping','${i.id}',{done:this.checked})" aria-label="Marcar como en el carrito">
+        <span class="title" style="${i.done ? 'text-decoration:line-through;opacity:.6' : ''}">${esc(i.name)}</span>
+        ${i.qty ? `<span class="meta">× ${esc(i.qty)}</span>` : ''}
+        <button class="icon-btn" onclick="del('shopping','${i.id}')" aria-label="Eliminar">🗑</button>
+      </div>
+    </div>`;
+  return `
+    <h2>🛒 Lista de supermercado</h2>
+    <div class="inline-add">
+      <input type="text" id="s-name" placeholder="Ej: leche" style="flex:1" onkeydown="if(event.key==='Enter')addShopItem()">
+      <input type="text" id="s-qty" placeholder="Cant. (ej: 2 kg)" style="width:140px" onkeydown="if(event.key==='Enter')addShopItem()">
+      <button class="btn" onclick="addShopItem()">Añadir</button>
+    </div>
+    <h3>Por comprar (${pending.length})</h3>
+    ${pending.map(row).join('') || '<p class="meta">Nada pendiente. Agregá lo que te falta.</p>'}
+    ${done.length ? `<h3>En el carrito (${done.length})</h3>${done.map(row).join('')}
+      <button class="btn ghost small" style="margin-top:8px" onclick="clearBoughtShopping()">🧹 Quitar los marcados</button>` : ''}
+  `;
+}
+window.addShopItem = async function () {
+  const name = $('#s-name').value.trim().slice(0, 80);
+  if (!name) return;
+  const qty = $('#s-qty').value.trim().slice(0, 30);
+  await addItem('shopping', { name, qty, done: false, createdAt: new Date().toISOString() });
+};
+window.clearBoughtShopping = async function () {
+  const ids = (D.shopping || []).filter(i => i.done).map(i => i.id);
+  if (!ids.length) return;
+  await Promise.all(ids.map(id => fetch(`/api/shopping/${id}`, { method: 'DELETE' })));
   await reload();
 };
 
@@ -1067,8 +1368,8 @@ const NEWS_BTN_LABEL = '📰 Noticias';
 function digestCount() { return (digest?.topics || []).reduce((n, g) => n + g.items.length, 0); }
 // Aviso de titulares: la app lo pide al abrirse y también lo notifica (1 vez por día)
 function updateNewsBadge() {
-  const nb = $('nav button[data-tab="news"]');
-  if (nb) nb.textContent = NEWS_BTN_LABEL + (digestCount() ? ` · ${digestCount()}` : '');
+  const nbs = $$('#tabsTrack [data-tab="news"]');
+  nbs.forEach(nb => { nb.textContent = NEWS_BTN_LABEL + (digestCount() ? ` · ${digestCount()}` : ''); });
 }
 function notifyDigest() {
   if (!notifOn() || !digest?.topics?.length) return;
@@ -1116,7 +1417,7 @@ function digestHtml() {
     ${digest.topics.map(g => `
       <div style="margin-top:8px">
         <div class="meta" style="font-weight:700">${esc(g.topic)}</div>
-        ${g.items.map(n => `<a class="digest-item" href="${esc(n.url)}" target="_blank" rel="noopener">
+        ${g.items.map(n => `<a class="digest-item" href="${esc(safeHref(n.url))}" target="_blank" rel="noopener">
           <span class="news-title">${esc(n.title)}</span>
           <span class="meta">${esc(n.outlet || n.src)}${n.date ? ' · 📅 ' + esc(n.date) : ''}</span>
         </a>`).join('')}
@@ -1133,7 +1434,7 @@ function viewNews() {
   const chips = [...interests, ...auto.filter(a => !interests.includes(a))];
   return `
     <h2>📰 Centro de noticias</h2>
-    <p class="meta">🇪🇸 Solo noticias en español, sobre lo que estás aprendiendo y construyendo. Fuentes gratuitas sin cuenta: Google Noticias, Bing Noticias y Wikipedia.</p>
+    <p class="meta">Solo noticias en español, sobre lo que estás aprendiendo y construyendo. Fuentes gratuitas sin cuenta: Google Noticias, Bing Noticias y Wikipedia.</p>
     <div class="card due-panel">${digestHtml()}</div>
     <div class="card">
       <div class="row" style="justify-content:space-between;flex-wrap:wrap;gap:8px">
@@ -1199,7 +1500,7 @@ function newsCards(items) {
   return Object.entries(bySrc).map(([src, list]) => `
     <h3 style="margin:10px 0 6px">${newsIcon(src)} ${esc(src)} (${list.length})</h3>
     <div class="news-grid">${list.slice(0, 12).map(n => `
-      <a class="news-card" href="${esc(n.url)}" target="_blank" rel="noopener">
+      <a class="news-card" href="${esc(safeHref(n.url))}" target="_blank" rel="noopener">
         <div class="news-title">${esc(n.title)}</div>
         ${n.snippet ? `<div class="meta">${esc(n.snippet)}</div>` : ''}
         ${(n.outlet || n.date) ? `<div class="meta">${esc(n.outlet || '')}${n.outlet && n.date ? ' · ' : ''}${n.date ? '📅 ' + esc(n.date) : ''}</div>` : ''}
@@ -1326,13 +1627,8 @@ document.addEventListener('DOMContentLoaded', async () => {
   };
   if (localStorage.getItem('vida-theme') === 'dark') document.body.classList.add('dark');
   syncThemeIcon();
-  // Tabs
-  $$('nav button').forEach(b => b.onclick = () => {
-    $$('nav button').forEach(x => x.classList.remove('active'));
-    b.classList.add('active');
-    tab = b.dataset.tab;
-    render();
-  });
+  // Tabs: carrusel en bucle infinito
+  initTabs();
   // Exportar
   $('#exportBtn').onclick = () => { location.href = '/api/export'; };
   // Bloqueo con PIN
@@ -1346,5 +1642,5 @@ document.addEventListener('DOMContentLoaded', async () => {
 
 // PWA: registra el service worker para que el navegador ofrezca "Instalar app"
 if ('serviceWorker' in navigator) {
-  window.addEventListener('load', () => navigator.serviceWorker.register('/sw.js').catch(() => {}));
+  window.addEventListener('load', () => navigator.serviceWorker.register('/sw.js', { updateViaCache: 'none' }).catch(() => {}));
 }

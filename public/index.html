@@ -4,15 +4,18 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <title>procrastin-out — vence la procrastinación</title>
-<meta name="theme-color" content="#e2482e">
+<meta name="theme-color" content="#0D251C">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="procrastin-out">
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" type="image/png" sizes="192x192" href="icon-192.png">
-<link rel="icon" type="image/svg+xml" href="icon.svg">
 <link rel="apple-touch-icon" href="icon-180.png">
+<link rel="apple-touch-startup-image" href="splash-real.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Unbounded:wght@500;700;800;900&family=Manrope:wght@400;500;600;700;800&display=swap">
 <link rel="stylesheet" href="style.css">
 </head>
 <body data-tab="tasks">
@@ -20,7 +23,7 @@
   <div class="app-shell">
     <header class="topbar">
       <div class="brand">
-        <div class="brand-mark" aria-hidden="true">🥊</div>
+        <img class="brand-logo" src="icon-192.png" alt="" width="52" height="52">
         <div class="brand-text">
           <h1>procrastin-out</h1>
           <div class="brand-sub">vence la procrastinación</div>
@@ -37,26 +40,31 @@
       </div>
     </header>
 
-    <nav class="tabs" role="tablist" aria-label="Secciones de procrastin-out">
-      <button data-tab="tasks" class="active" role="tab">✅ Tareas</button>
-      <button data-tab="habits" role="tab">🔥 Hábitos</button>
-      <button data-tab="health" role="tab">🩺 Salud</button>
-      <button data-tab="meals" role="tab">🍎 Alimentación</button>
-      <button data-tab="commitments" role="tab">🤝 Compromisos</button>
-      <button data-tab="finances" role="tab">💸 Finanzas</button>
-      <button data-tab="learning" role="tab">📚 Aprendizaje</button>
-      <button data-tab="projects" role="tab">🚀 Proyectos</button>
-      <button data-tab="news" role="tab">📰 Noticias</button>
-      <button data-tab="rewards" role="tab">🏆 Logros</button>
+    <nav class="tabs" aria-label="Secciones de procrastin-out">
+      <button class="tab-arrow" id="tabPrev" type="button" aria-label="Ver pestañas anteriores">‹</button>
+      <div class="tabs-track" id="tabsTrack" role="tablist">
+        <button data-tab="tasks" class="active" role="tab" aria-selected="true">✅ Tareas</button>
+        <button data-tab="habits" role="tab" aria-selected="false">🔥 Hábitos</button>
+        <button data-tab="health" role="tab" aria-selected="false">🩺 Salud</button>
+        <button data-tab="meals" role="tab" aria-selected="false">🍎 Alimentación</button>
+        <button data-tab="shopping" role="tab" aria-selected="false">🛒 Supermercado</button>
+        <button data-tab="commitments" role="tab" aria-selected="false">🤝 Compromisos</button>
+        <button data-tab="finances" role="tab" aria-selected="false">💸 Finanzas</button>
+        <button data-tab="learning" role="tab" aria-selected="false">📚 Aprendizaje</button>
+        <button data-tab="projects" role="tab" aria-selected="false">🚀 Proyectos</button>
+        <button data-tab="news" role="tab" aria-selected="false">📰 Noticias</button>
+        <button data-tab="rewards" role="tab" aria-selected="false">🏆 Logros</button>
+      </div>
+      <button class="tab-arrow" id="tabNext" type="button" aria-label="Ver pestañas siguientes">›</button>
     </nav>
 
     <main id="app" class="stage"></main>
 
     <footer class="dock">
-      <button id="phoneBtn" onclick="openPhoneModal()">📱 Celular</button>
-      <button id="exportBtn">⬇️ Exportar datos</button>
-      <button id="pinBtn" title="Cambiar PIN">🔑 PIN</button>
-      <button id="lockBtn" title="Bloquear la app">🔒 Bloquear</button>
+      <button id="phoneBtn" onclick="openPhoneModal()" aria-label="Usar en el celular"><span aria-hidden="true">📱</span><span class="lbl">Celular</span></button>
+      <button id="exportBtn" aria-label="Exportar datos"><span aria-hidden="true">⬇️</span><span class="lbl">Exportar</span></button>
+      <button id="pinBtn" title="Cambiar PIN" aria-label="Cambiar PIN"><span aria-hidden="true">🔑</span><span class="lbl">PIN</span></button>
+      <button id="lockBtn" title="Bloquear la app" aria-label="Bloquear la app"><span aria-hidden="true">🔒</span><span class="lbl">Bloquear</span></button>
       <span id="saveState"></span>
     </footer>
 
