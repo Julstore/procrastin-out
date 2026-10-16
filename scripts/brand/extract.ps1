@@ -1,3 +1,11 @@
+# OBSOLETO (15/10/2026): el pipeline vigente es
+#   powershell -NoProfile -ExecutionPolicy Bypass -File scripts/brand/decode-master.ps1
+#   node scripts/brand/build-brand.mjs
+# Este script recortaba el tile con un bbox que cortaba las flechas y el rótulo del icono
+# y dejaba placas oscuras en el maskable. Se deja como referencia, sin ejecutar.
+Write-Host 'OBSOLETO: usá decode-master.ps1 + build-brand.mjs (este script corta mal el icono).'
+exit 1
+
 # Extrae el logo REAL del master JPG del usuario (pixel-perfect, sin redibujar).
 # 1) Detecta el bounding box del tile verde por densidad de píxeles verdosos.
 # 2) Mide el radio de esquina escaneando la primera fila verde de la esquina sup-izq.

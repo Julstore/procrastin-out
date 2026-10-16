@@ -28,7 +28,7 @@ const DATA_FILE = path.join(DATA_DIR, 'vida.json');
 const AUTH_FILE = path.join(DATA_DIR, 'auth.json'); // PIN (hash) — fuera del export de datos
 const PUBLIC_DIR = path.join(__dirname, 'public');
 // Marca e íconos: públicos (sin datos) para que login y la instalación PWA los vean sin sesión.
-const PUBLIC_ASSETS = new Set(['/manifest.webmanifest', '/mark-real.png', '/label-real.png', '/icon-192.png', '/icon-512.png', '/icon-180.png', '/icon-maskable-512.png', '/splash-real.png']);
+const PUBLIC_ASSETS = new Set(['/manifest.webmanifest', '/mark-real.png', '/label-real.png', '/icon-192.png', '/icon-512.png', '/icon-180.png', '/icon-maskable-512.png', '/splash-bg.png', '/splash-real.png']);
 const MIME = {
   '.html': 'text/html; charset=utf-8',
   '.js': 'text/javascript; charset=utf-8',

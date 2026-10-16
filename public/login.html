@@ -8,8 +8,8 @@
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <link rel="manifest" href="manifest.webmanifest">
-<link rel="icon" type="image/png" sizes="192x192" href="icon-192.png">
-<link rel="apple-touch-icon" href="icon-180.png">
+<link rel="icon" type="image/png" sizes="192x192" href="icon-192.png?v=2">
+<link rel="apple-touch-icon" href="icon-180.png?v=2">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Unbounded:wght@500;700;800;900&family=Manrope:wght@400;500;600;700;800&display=swap">
@@ -32,11 +32,25 @@ button:hover { filter:brightness(1.05); transform:translateY(-1px); }
 .err.shake { animation: shake .28s ease; }
 @keyframes shake { 25% { transform: translateX(-5px); } 50% { transform: translateX(5px); } 75% { transform: translateX(-3px); } }
 a { color:var(--muted); font-size:13px; }
+/* Splash de marca: el mismo arte real que la app, surgiendo desde el centro. */
+#poutSplash { position:fixed; inset:0; z-index:9999; overflow:hidden; background:#0D251C url('splash-bg.png?v=2') center/100% 100% no-repeat; }
+#poutSplash .art { position:absolute; inset:0; animation:poutSplashIn .9s cubic-bezier(.22,.9,.28,1) both; }
+#poutSplash .mk { position:absolute; left:53.8%; top:41.4%; width:69.8%; height:auto; transform:translate(-50%,-50%); }
+#poutSplash .lb { position:absolute; left:49.8%; top:59.7%; width:83%; height:auto; transform:translate(-50%,-50%); }
+#poutSplash.off { opacity:0; transition:opacity .35s ease; pointer-events:none; }
+@keyframes poutSplashIn { from { opacity:0; transform:scale(.86); } to { opacity:1; transform:none; } }
+@media (prefers-reduced-motion: reduce) { #poutSplash .art { animation:none; } }
 </style>
 </head>
 <body>
+<div id="poutSplash" aria-hidden="true">
+  <div class="art">
+    <img class="mk" src="mark-real.png?v=2" alt="" width="239" height="178">
+    <img class="lb" src="label-real.png?v=2" alt="" width="246" height="21">
+  </div>
+</div>
 <div class="box">
-  <div class="mark"><img src="icon-192.png" alt="procrastin-out"></div>
+  <div class="mark"><img src="icon-192.png?v=2" alt="procrastin-out"></div>
   <h1>procrastin-out</h1>
   <p class="sub" id="sub">Comprobando...</p>
   <div id="form"></div>
@@ -87,7 +101,20 @@ async function init(){
     };
   }
 }
-init();
+(function () {
+  var el = document.getElementById('poutSplash');
+  if (!el) return;
+  var off = false;
+  window.poutSplashDone = function () {
+    if (off) return;
+    off = true;
+    el.classList.add('off');
+    setTimeout(function () { el.remove(); }, 400);
+  };
+  setTimeout(window.poutSplashDone, 6000);
+})();
+// el formulario aparece cuando init() terminó; el splash se retira un instante después, para que se vea surgir
+init().then(function () { setTimeout(window.poutSplashDone, 900); }, function () { window.poutSplashDone(); });
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => navigator.serviceWorker.register('/sw.js', { updateViaCache: 'none' }).catch(() => {}));
 }

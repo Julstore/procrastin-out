@@ -1,8 +1,9 @@
 // procrastin-out SW: hace la app instalable y cachea SOLO imágenes/manifest.
 // HTML, API, JS y CSS nunca se sirven desde caché para evitar versiones viejas
 // después de un deploy: van a la red primero y la caché es solo respaldo offline.
-const V = 'pout-v5';
-const STATIC = ['/icon-192.png', '/icon-512.png', '/icon-180.png', '/manifest.webmanifest', '/splash-real.png', '/mark-real.png', '/label-real.png'];
+const V = 'pout-v6';
+// Solo marca e íconos: son públicos y pequeños. El splash grande (iOS) queda fuera a propósito.
+const STATIC = ['/icon-192.png?v=2', '/icon-512.png?v=2', '/icon-180.png?v=2', '/icon-maskable-512.png?v=2', '/manifest.webmanifest', '/mark-real.png?v=2', '/label-real.png?v=2', '/splash-bg.png?v=2'];
 const NETWORK_FIRST = /\.(js|css)$/i;
 self.addEventListener('install', (e) => {
   e.waitUntil(caches.open(V).then((c) => c.addAll(STATIC)).then(() => self.skipWaiting()));

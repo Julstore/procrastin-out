@@ -1634,7 +1634,9 @@ document.addEventListener('DOMContentLoaded', async () => {
   // Bloqueo con PIN
   $('#lockBtn').onclick = async () => { await fetch('/api/auth/logout', { method: 'POST' }); location.href = '/login.html'; };
   $('#pinBtn').onclick = () => { location.href = '/login.html'; };
-  await reload();
+  // El splash de marca se retira cuando la app ya pintó (aunque falle la carga, no se queda pegado)
+  try { await reload(); }
+  finally { if (typeof window.poutSplashDone === 'function') window.poutSplashDone(); }
   // Titulares del día: se piden al abrir la app (y se notifican una vez por día)
   updateNewsBadge();
   window.loadDigest();

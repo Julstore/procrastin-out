@@ -10,20 +10,37 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="procrastin-out">
 <link rel="manifest" href="manifest.webmanifest">
-<link rel="icon" type="image/png" sizes="192x192" href="icon-192.png">
-<link rel="apple-touch-icon" href="icon-180.png">
-<link rel="apple-touch-startup-image" href="splash-real.png">
+<link rel="icon" type="image/png" sizes="192x192" href="icon-192.png?v=2">
+<link rel="apple-touch-icon" href="icon-180.png?v=2">
+<link rel="apple-touch-startup-image" href="splash-real.png?v=2">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Unbounded:wght@500;700;800;900&family=Manrope:wght@400;500;600;700;800&display=swap">
 <link rel="stylesheet" href="style.css">
+<style>
+  /* Splash de marca: el arte real (pantalla verde + halos + logo) surge desde el centro.
+     Va en linea para que se vea al instante, sin esperar style.css ni la red. */
+  #poutSplash { position: fixed; inset: 0; z-index: 9999; overflow: hidden; background: #0D251C url('splash-bg.png?v=2') center/100% 100% no-repeat; }
+  #poutSplash .art { position: absolute; inset: 0; animation: poutSplashIn .9s cubic-bezier(.22,.9,.28,1) both; }
+  #poutSplash .mk { position: absolute; left: 53.8%; top: 41.4%; width: 69.8%; height: auto; transform: translate(-50%, -50%); }
+  #poutSplash .lb { position: absolute; left: 49.8%; top: 59.7%; width: 83%; height: auto; transform: translate(-50%, -50%); }
+  #poutSplash.off { opacity: 0; transition: opacity .35s ease; pointer-events: none; }
+  @keyframes poutSplashIn { from { opacity: 0; transform: scale(.86); } to { opacity: 1; transform: none; } }
+  @media (prefers-reduced-motion: reduce) { #poutSplash .art { animation: none; } }
+</style>
 </head>
 <body data-tab="tasks">
+  <div id="poutSplash" aria-hidden="true">
+    <div class="art">
+      <img class="mk" src="mark-real.png?v=2" alt="" width="239" height="178">
+      <img class="lb" src="label-real.png?v=2" alt="" width="246" height="21">
+    </div>
+  </div>
   <div class="bg-orbs" aria-hidden="true"><span></span><span></span><span></span></div>
   <div class="app-shell">
     <header class="topbar">
       <div class="brand">
-        <img class="brand-logo" src="icon-192.png" alt="" width="52" height="52">
+        <img class="brand-logo" src="icon-192.png?v=2" alt="" width="52" height="52">
         <div class="brand-text">
           <h1>procrastin-out</h1>
           <div class="brand-sub">vence la procrastinación</div>
@@ -82,6 +99,22 @@
     <div id="flyingXp"></div>
   </div>
 
+  <script>
+    // El splash se retira cuando la app terminó de pintar (app.js llama a poutSplashDone).
+    // La red de seguridad evita que se quede pegado si el servidor tarda en despertar.
+    (function () {
+      var el = document.getElementById('poutSplash');
+      if (!el) return;
+      var off = false;
+      window.poutSplashDone = function () {
+        if (off) return;
+        off = true;
+        el.classList.add('off');
+        setTimeout(function () { el.remove(); }, 400);
+      };
+      setTimeout(window.poutSplashDone, 6000);
+    })();
+  </script>
   <!--APP_JS-->
 </body>
 </html>

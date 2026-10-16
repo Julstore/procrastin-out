@@ -1,6 +1,10 @@
 node_modules/
 dist/
 *.log
+# Scratch de trabajo (capturas, sondas y master decodificado para el pipeline de marca)
+tmp-inspect/
+scripts/brand/.master.rgba
+scripts/brand/.master.json
 # Datos personales + secretos: NUNCA subir a GitHub
 # (la nube usa Postgres vía DATABASE_URL, no estos archivos)
 data/
