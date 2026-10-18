@@ -7,6 +7,7 @@ const os = require('os');
 const path = require('path');
 const { assertPublicFeedUrl, fetchPublicFeed, stripTags, parseRssItems, clientIpFrom } = require('./lib/feed-safety');
 const { limitsFromEnv, getUsage, quotaError, reserveRequest, tokenCounts, recordCall, TtlCache, cacheKey } = require('./lib/ai-budget');
+const agentCommands = require('./lib/agent-commands');
 
 // Carga de .env (clave de IA) sin dependencias externas.
 // La app de escritorio (Electron) puede definir POUT_DATA_DIR: la config junto a los datos
@@ -30,7 +31,7 @@ const PUBLIC_DIR = path.join(__dirname, 'public');
 // Marca e íconos: públicos (sin datos) para que login y la instalación PWA los vean sin sesión.
 // /sw.js también es público: si no, el service worker no puede instalarse desde el login
 // (302 a login.html) y los dispositivos se quedan con la versión vieja en caché.
-const PUBLIC_ASSETS = new Set(['/sw.js', '/manifest.webmanifest', '/mark-real.png', '/label-real.png', '/icon-192.png', '/icon-512.png', '/icon-180.png', '/icon-maskable-512.png', '/splash-bg.png', '/splash-real.png']);
+const PUBLIC_ASSETS = new Set(['/sw.js', '/cache-guard.js', '/manifest.webmanifest', '/mark-real.png', '/label-real.png', '/icon-192.png', '/icon-512.png', '/icon-180.png', '/icon-maskable-512.png', '/splash-bg.png', '/splash-real.png']);
 const MIME = {
   '.html': 'text/html; charset=utf-8',
   '.js': 'text/javascript; charset=utf-8',
@@ -504,6 +505,309 @@ function handleDataPut(before, body) {
   return { xp: total, titles, leveledUp, newLevel, newBadges: badges, freezeSaved };
 }
 
+// ===== Agente externo (Jarvis) =====
+// Token propio del agente: no reemplaza al PIN ni se sirve por API.
+// Alcance: /api/agent/* completo + lecturas GET puntuales. Las escrituras pasan
+// solo por comandos, así quedan auditadas y con idempotencia.
+const AGENT_TOKEN_FILE = path.join(DATA_DIR, 'agent-token');
+const AGENT_LOG_FILE = path.join(DATA_DIR, 'agent.log');
+function ensureAgentToken() {
+  const env = String(process.env.POUT_AGENT_TOKEN || '').trim();
+  if (env) return env;
+  try {
+    const saved = fs.readFileSync(AGENT_TOKEN_FILE, 'utf8').trim();
+    if (/^[a-f0-9]{64}$/.test(saved)) return saved;
+  } catch (_) { /* todavía no existe */ }
+  const token = crypto.randomBytes(32).toString('hex');
+  try {
+    fs.mkdirSync(DATA_DIR, { recursive: true });
+    fs.writeFileSync(AGENT_TOKEN_FILE, token + '\n', { mode: 0o600 });
+  } catch (e) {
+    console.error('No se pudo guardar el token de agente:', e.message);
+  }
+  return token;
+}
+const AGENT_TOKEN = ensureAgentToken();
+
+// Revisión global del estado + clientes SSE (la usan el HUD y el cliente web).
+let STATE_REV = 0;
+const SSE_CLIENTS = new Set();
+function broadcast(event, payload = {}, opts = {}) {
+  // quiet: telemetría (voz) que no representa un cambio de datos, así no mueve la
+  // revisión ni provoca recargas en los clientes.
+  if (!opts.quiet) STATE_REV++;
+  if (!SSE_CLIENTS.size) return;
+  const chunk = `event: ${event}\ndata: ${JSON.stringify({ ...payload, rev: STATE_REV })}\n\n`;
+  for (const client of SSE_CLIENTS) {
+    try { client.write(chunk); } catch (_) { SSE_CLIENTS.delete(client); }
+  }
+}
+
+function agentTokenFrom(req) {
+  const m = String(req.headers.authorization || '').match(/^Bearer\s+([A-Za-z0-9_-]{8,128})$/);
+  return m ? m[1] : null;
+}
+function tokenMatches(token) {
+  if (!token) return false;
+  const a = Buffer.from(token);
+  const b = Buffer.from(AGENT_TOKEN);
+  return a.length === b.length && crypto.timingSafeEqual(a, b);
+}
+// Lecturas permitidas con token de agente (nunca escrituras fuera de /api/agent).
+const AGENT_READ_PATHS = new Set(['/api/data', '/api/rewards', '/api/lan', '/api/ai/usage', '/api/state/rev']);
+function agentScopeOk(req, pathname) {
+  if (pathname.startsWith('/api/agent/')) return true;
+  if (req.method !== 'GET') return false;
+  if (AGENT_READ_PATHS.has(pathname) || pathname.startsWith('/api/news')) return true;
+  const m = pathname.match(/^\/api\/([a-z]+)$/);
+  return !!m && (m[1] in COLLECTIONS || MUTABLE_TOP.has(m[1]));
+}
+// Anti fuerza bruta del token: 5 fallos/min. Rate limit de comandos: 60/min.
+const AGENT_FAILS = [];
+function agentTokenBlocked() {
+  const now = Date.now();
+  while (AGENT_FAILS.length && now - AGENT_FAILS[0] > 60_000) AGENT_FAILS.shift();
+  return AGENT_FAILS.length >= 5;
+}
+function agentTokenFailed() {
+  AGENT_FAILS.push(Date.now());
+  if (AGENT_FAILS.length > 50) AGENT_FAILS.shift();
+}
+const AGENT_CMD_TIMES = [];
+function agentRateBlocked() {
+  const now = Date.now();
+  while (AGENT_CMD_TIMES.length && now - AGENT_CMD_TIMES[0] > 60_000) AGENT_CMD_TIMES.shift();
+  return AGENT_CMD_TIMES.length >= 60;
+}
+function agentAudit(entry) {
+  try { fs.appendFileSync(AGENT_LOG_FILE, JSON.stringify(entry) + '\n'); } catch (_) { /* auditoría best-effort */ }
+}
+
+// Idempotencia (10 min) y undo (30 s): en memoria, se pierden al reiniciar.
+const AGENT_IDEMP = new Map();
+const AGENT_UNDO = new Map();
+const AGENT_IDEMP_TTL = 10 * 60_000;
+const AGENT_UNDO_TTL = 30_000;
+const AGENT_NO_UNDO = new Set(['status.today', 'catalog', 'tasks.list', 'habits.list', 'rewards.status', 'coach.advise', 'news.digest', 'nav.open', 'pomodoro.start', 'pomodoro.stop', 'undo']);
+function pruneAgentCaches() {
+  const now = Date.now();
+  for (const [k, v] of AGENT_IDEMP) if (now - v.at > AGENT_IDEMP_TTL) AGENT_IDEMP.delete(k);
+  for (const [k, v] of AGENT_UNDO) if (now - v.at > AGENT_UNDO_TTL) AGENT_UNDO.delete(k);
+  while (AGENT_IDEMP.size > 500) AGENT_IDEMP.delete(AGENT_IDEMP.keys().next().value);
+  while (AGENT_UNDO.size > 20) AGENT_UNDO.delete(AGENT_UNDO.keys().next().value);
+}
+
+function rewardsSnapshot() {
+  const h = data.hero || { ...DEFAULT_DATA.hero };
+  const prog = levelFromXp(h.totalXp || 0);
+  let freeze = { available: true };
+  try { const f = freezeState(); freeze = { available: !f.used, week: f.week }; } catch (_) { /* datos viejos */ }
+  return {
+    hero: { name: h.name || 'Aventurero', level: prog.level, xpInLevel: prog.current, xpToNext: prog.need, totalXp: h.totalXp || 0, streak: h.streak || 0, freeze },
+    badges: BADGES.map(b => ({ id: b.id, emoji: b.emoji, name: b.name, desc: b.desc, at: h.badges?.[b.id] || null })),
+    history: (h.history || []).slice(0, 10),
+  };
+}
+
+// Contexto compacto para que el agente pida consejo sin duplicar el prompt de la UI.
+async function agentAdvise(kind = 'strategy') {
+  const t = todayKey();
+  const tasks = Array.isArray(data.tasks) ? data.tasks : [];
+  const overdue = tasks.filter(x => !x.done && x.due && x.due < t);
+  const dueToday = tasks.filter(x => !x.done && x.due === t);
+  const openT = tasks.filter(x => !x.done && (!x.due || x.due > t));
+  const pendingHabits = (data.habits || []).filter(h => !h.log?.[t]).map(h => h.name);
+  const todayItems = [...(data.commitments || []).filter(c => !c.done && c.date && c.date <= t).map(c => c.title),
+    ...(data.appointments || []).filter(a => !a.done && a.date && a.date <= t).map(a => a.title)];
+  const prompt = [
+    `Hoy es ${t}. Nivel ${data.hero?.level || 1}, racha ${data.hero?.streak || 0} días.`,
+    `VENCIDAS: ${overdue.slice(0, 8).map(x => x.title).join('; ') || 'ninguna'}.`,
+    `VENCEN HOY: ${dueToday.slice(0, 8).map(x => x.title).join('; ') || 'ninguna'}.`,
+    `ABIERTAS: ${openT.slice(0, 8).map(x => x.title).join('; ') || 'ninguna'}.`,
+    `HÁBITOS PENDIENTES: ${pendingHabits.slice(0, 8).join('; ') || 'ninguno'}.`,
+    `COMPROMISOS Y CITAS DE HOY O VENCIDOS: ${todayItems.slice(0, 6).join('; ') || 'ninguno'}.`,
+    'Respondé en español, en bullets con *, máximo 8 líneas, directo y accionable, sin saludo ni cierre.',
+  ].join('\n');
+  const system = kind === 'diet' || kind === 'plan'
+    ? 'Sos un asesor de nutrición prudente: orientación general de estilo de vida, sin diagnóstico médico. Respondés en español.'
+    : 'Sos un coach anti-procrastinación, claro y directo. Respondés en español.';
+  return llmCall([
+    { role: 'system', content: system },
+    { role: 'user', content: prompt },
+  ], { kind: `agent-${kind}`, scope: 'agent' });
+}
+
+function runAgentCommand(name, args) {
+  return agentCommands.run(name, args, {
+    data,
+    save,
+    todayKey,
+    uid,
+    grantXp,
+    rewards: rewardsSnapshot,
+    aiAdvise: agentAdvise,
+    digest: () => buildDigest(false),
+  });
+}
+
+// ---- Estado vivo de Jarvis ----
+// Heartbeat independiente del uso de voz; el estado vive en memoria y expira.
+// No se guarda contenido de mensajes ni credenciales en el registro de acciones.
+const AGENT_HEARTBEAT_TTL = Math.max(500, Number(process.env.POUT_AGENT_HEARTBEAT_TTL_MS) || 15_000);
+const AGENT_INSTANCES = new Map();
+let AGENT_LAST_HEARTBEAT_AT = 0;
+let AGENT_LAST_ACTION = { at: 0, action: '', source: '' };
+let agentStatusBroadcastAt = 0;
+function currentAgentStatus() {
+  const now = Date.now();
+  for (const [id, instance] of AGENT_INSTANCES) {
+    if (now - instance.heartbeatAt > AGENT_HEARTBEAT_TTL) AGENT_INSTANCES.delete(id);
+  }
+  const active = [...AGENT_INSTANCES.values()];
+  const heartbeatAt = active.reduce((latest, item) => Math.max(latest, item.heartbeatAt), 0);
+  return {
+    running: active.length > 0,
+    heartbeatAt,
+    lastActionAt: AGENT_LAST_ACTION.at,
+    lastAction: AGENT_LAST_ACTION.action,
+    lastSource: AGENT_LAST_ACTION.source || active[0]?.source || '',
+    instances: active.length,
+    heartbeatTtlMs: AGENT_HEARTBEAT_TTL,
+  };
+}
+function updateAgentHeartbeat(body = {}) {
+  const now = Date.now();
+  const id = typeof body.instanceId === 'string' && /^[A-Za-z0-9_-]{8,80}$/.test(body.instanceId)
+    ? body.instanceId
+    : 'legacy-agent';
+  const action = typeof body.action === 'string'
+    ? body.action.trim().slice(0, 100)
+    : '';
+  const source = typeof body.source === 'string' ? body.source.trim().slice(0, 40) : '';
+  if (action) AGENT_LAST_ACTION = { at: now, action, source };
+  if (body.running === false) AGENT_INSTANCES.delete(id);
+  else {
+    AGENT_LAST_HEARTBEAT_AT = now;
+    AGENT_INSTANCES.set(id, { heartbeatAt: now, source });
+  }
+  if (action || now - agentStatusBroadcastAt >= 5_000 || body.running === false) {
+    agentStatusBroadcastAt = now;
+    broadcast('agent-status', { origin: 'agent', agent: currentAgentStatus() }, { quiet: true });
+  }
+  return currentAgentStatus();
+}
+
+// ---- Voz: niveles que manda Jarvis mientras escucha o habla ----
+// Es telemetría para el HUD, no un comando: no pasa por el rate limit de comandos
+// ni mueve la revisión del estado. Se conserva el último estado para que un HUD
+// que se abre en medio de la conversación se sincronice al conectar.
+const VOICE_STATES = new Set(['idle', 'listening', 'thinking', 'speaking']);
+let VOICE = { level: 0, state: 'idle', text: '', at: 0 };
+let voiceLastAt = 0;
+function currentVoice() {
+  if (Date.now() - VOICE.at > 5000) return { level: 0, state: 'idle', text: '', at: VOICE.at };
+  return VOICE;
+}
+async function handleAgentVoice(req, res) {
+  if (!tokenMatches(agentTokenFrom(req))) return respond(res, 401, { error: 'Token de agente inválido' });
+  let body;
+  try { body = await getBody(req); }
+  catch (e) { return respond(res, 400, { error: e.message }); }
+  const now = Date.now();
+  const level = Math.max(0, Math.min(1, Number(body?.level) || 0));
+  const state = VOICE_STATES.has(body?.state) ? body.state : 'listening';
+  const text = typeof body?.text === 'string' ? body.text.slice(0, 200) : VOICE.text;
+  VOICE = { level, state, text, at: now };
+  updateAgentHeartbeat({ instanceId: 'legacy-agent', source: 'voice' });
+  // Techo de ~40 fps: el HUD no necesita más y el SSE no se satura.
+  if (now - voiceLastAt < 25) return respond(res, 200, { ok: true, throttled: true });
+  voiceLastAt = now;
+  broadcast('voice', { origin: 'agent', level, state, text }, { quiet: true });
+  return respond(res, 200, { ok: true });
+}
+
+// POST /api/agent/command — punto único de escritura para Jarvis.
+async function handleAgentCommand(req, res) {
+  if (!tokenMatches(agentTokenFrom(req))) return respond(res, 401, { error: 'Token de agente inválido' });
+  if (agentRateBlocked()) return respond(res, 429, { error: 'Demasiados comandos por minuto' });
+  let body;
+  try { body = await getBody(req); }
+  catch (e) { return respond(res, 400, { error: e.message }); }
+  const command = String(body?.command || '').trim();
+  const args = body && body.args && typeof body.args === 'object' && !Array.isArray(body.args) ? body.args : {};
+  if (!command) return respond(res, 400, { error: 'Falta command', commands: agentCommands.COMMANDS.map(c => c.name) });
+  const requestId = typeof body?.requestId === 'string' ? body.requestId.slice(0, 128) : '';
+  const source = typeof body?.source === 'string' ? body.source.slice(0, 20) : 'api';
+  updateAgentHeartbeat({ action: `Comando: ${command}`, instanceId: 'legacy-agent', source });
+  const started = Date.now();
+  AGENT_CMD_TIMES.push(started);
+  pruneAgentCaches();
+
+  const hash = crypto.createHash('sha1').update(JSON.stringify({ command, args })).digest('hex');
+  if (requestId) {
+    const prev = AGENT_IDEMP.get(requestId);
+    if (prev) {
+      if (prev.hash !== hash) return respond(res, 409, { error: 'requestId reutilizado con otro contenido' });
+      return respond(res, 200, { ...prev.response, deduped: true });
+    }
+  }
+
+  if (command === 'undo') {
+    const token = String(args.undoToken || '');
+    const entry = AGENT_UNDO.get(token);
+    if (!entry) return respond(res, 410, { error: 'No hay nada que deshacer (o expiró)' });
+    if (Date.now() - entry.at > AGENT_UNDO_TTL) {
+      AGENT_UNDO.delete(token);
+      return respond(res, 410, { error: 'La ventana para deshacer expiró' });
+    }
+    data = JSON.parse(entry.snapshot);
+    AGENT_UNDO.delete(token);
+    save();
+    broadcast('state', { origin: 'agent' });
+    const response = { ok: true, command: 'undo', data: { undid: entry.command }, game: null, say: 'Deshecho.', ui: null };
+    if (requestId) AGENT_IDEMP.set(requestId, { hash, response, at: Date.now() });
+    agentAudit({ ts: new Date().toISOString(), command, ok: true, ms: Date.now() - started, source });
+    return respond(res, 200, { ...response, rev: STATE_REV });
+  }
+
+  const snapshot = AGENT_NO_UNDO.has(command) ? null : JSON.stringify(data);
+  let result;
+  try {
+    result = await runAgentCommand(command, args);
+  } catch (e) {
+    const status = e.status || 400;
+    agentAudit({ ts: new Date().toISOString(), command, ok: false, ms: Date.now() - started, source, status, error: e.message });
+    return respond(res, status, { error: e.message || 'Error del comando', ...(e.extra || {}) });
+  }
+
+  let undoToken = null;
+  if (snapshot) {
+    undoToken = crypto.randomBytes(9).toString('hex');
+    AGENT_UNDO.set(undoToken, { snapshot, at: Date.now(), command });
+  }
+  const response = {
+    ok: true,
+    command,
+    data: result.data === undefined ? null : result.data,
+    game: result.game || null,
+    say: result.say || '',
+    ui: result.ui || null,
+  };
+  if (undoToken) response.undoToken = undoToken;
+  if (requestId) AGENT_IDEMP.set(requestId, { hash, response, at: Date.now() });
+
+  if (snapshot) {
+    // `say` viaja en el evento: el HUD muestra exactamente lo que el agente respondió.
+    broadcast('state', { origin: 'agent', tab: result.ui?.tab || null, highlight: result.ui?.highlight || null, command, say: result.say || '' });
+  }
+  if (result.game && (result.game.xp > 0 || result.game.leveledUp || result.game.newBadges?.length)) {
+    broadcast('reward', { origin: 'agent', game: result.game });
+  }
+  if (result.event) broadcast(result.event.name, { origin: 'agent', ...result.event.data });
+  agentAudit({ ts: new Date().toISOString(), command, ok: true, ms: Date.now() - started, source, rev: STATE_REV });
+  return respond(res, 200, { ...response, rev: STATE_REV });
+}
+
 // ===== IA =====
 // Llama a OpenLLM (pasarela OpenAI-compatible con clave sk-llm-). Sin clave configurada, sugiere pasos al usuario.
 const LLM_MODEL = process.env.LLM_MODEL || 'plus';
@@ -843,13 +1147,62 @@ const server = http.createServer(async (req, res) => {
       res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8', 'Set-Cookie': SESSION_COOKIE(token) });
       return res.end(JSON.stringify({ ok: true }));
     }
-    // Puerta: páginas y API exigen sesión válida (login.html siempre público)
-    if (!getSession(req) && !PUBLIC_ASSETS.has(pathname)) {
-      if (pathname.startsWith('/api/')) return respond(res, 401, { error: 'No autenticado', login: '/login.html' });
+    // Puerta: páginas y API exigen sesión válida (login.html siempre público).
+    // El token de agente solo abre /api/agent/* y las lecturas declaradas.
+    const sessionOk = !!getSession(req);
+    const bearer = agentTokenFrom(req);
+    const tokenOk = tokenMatches(bearer);
+    if (bearer && !tokenOk) agentTokenFailed();
+    if (!sessionOk && !(tokenOk && agentScopeOk(req, pathname)) && !PUBLIC_ASSETS.has(pathname)) {
+      if (pathname.startsWith('/api/')) {
+        if (agentTokenBlocked()) return respond(res, 429, { error: 'Demasiados intentos con token de agente' });
+        return respond(res, 401, { error: bearer ? 'Token de agente inválido' : 'No autenticado', login: '/login.html' });
+      }
       if (pathname !== '/login.html') {
         res.writeHead(302, { Location: '/login.html' });
         return res.end();
       }
+    }
+
+    // ---- Agente externo (Jarvis) ----
+    if (pathname === '/api/state/rev' && req.method === 'GET') {
+      return respond(res, 200, { rev: STATE_REV });
+    }
+    if (pathname === '/api/agent/events' && req.method === 'GET') {
+      res.writeHead(200, {
+        'Content-Type': 'text/event-stream; charset=utf-8',
+        'Cache-Control': 'no-store',
+        'Connection': 'keep-alive',
+        'X-Accel-Buffering': 'no',
+      });
+      res.write(`event: hello\ndata: ${JSON.stringify({ rev: STATE_REV, voice: currentVoice(), agent: currentAgentStatus() })}\n\n`);
+      SSE_CLIENTS.add(res);
+      const ping = setInterval(() => {
+        try { res.write(': ping\n\n'); } catch (_) { /* cliente cerrado */ }
+      }, 15_000);
+      if (ping.unref) ping.unref();
+      req.on('close', () => { clearInterval(ping); SSE_CLIENTS.delete(res); });
+      return;
+    }
+    if (pathname === '/api/agent/command' && req.method === 'POST') {
+      return handleAgentCommand(req, res);
+    }
+    if (pathname === '/api/agent/heartbeat' && req.method === 'GET') {
+      return respond(res, 200, currentAgentStatus());
+    }
+    if (pathname === '/api/agent/heartbeat' && req.method === 'POST') {
+      if (!tokenMatches(agentTokenFrom(req))) return respond(res, 401, { error: 'Token de agente inválido' });
+      let body;
+      try { body = await getBody(req); }
+      catch (e) { return respond(res, 400, { error: e.message }); }
+      updateAgentHeartbeat(body || {});
+      return respond(res, 200, { ok: true, agent: currentAgentStatus() });
+    }
+    if (pathname === '/api/agent/voice' && req.method === 'GET') {
+      return respond(res, 200, currentVoice());
+    }
+    if (pathname === '/api/agent/voice' && req.method === 'POST') {
+      return handleAgentVoice(req, res);
     }
 
     // ---- API ----
@@ -871,16 +1224,11 @@ const server = http.createServer(async (req, res) => {
       let game = null;
       try { game = handleDataPut(before, body); } catch (e) { console.error('rewards:', e.message); }
       save();
+      broadcast('state', { origin: 'ui' });
       return respond(res, 200, { ok: true, game });
     }
     if (pathname === '/api/rewards' && req.method === 'GET') {
-      const h = data.hero || { ...DEFAULT_DATA.hero };
-      const prog = levelFromXp(h.totalXp || 0);
-      return respond(res, 200, {
-        hero: { name: h.name || 'Aventurero', level: prog.level, xpInLevel: prog.current, xpToNext: prog.need, totalXp: h.totalXp || 0, streak: h.streak || 0, freeze: (() => { try { const f = freezeState(); return { available: !f.used, week: f.week }; } catch (_) { return { available: true }; } })() },
-        badges: BADGES.map(b => ({ id: b.id, emoji: b.emoji, name: b.name, desc: b.desc, at: h.badges?.[b.id] || null })),
-        history: (h.history || []).slice(0, 10),
-      });
+      return respond(res, 200, rewardsSnapshot());
     }
     if (pathname === '/api/news' && req.method === 'GET') {
       const q = String(url.searchParams.get('q') || '').trim().slice(0, 80);
@@ -942,11 +1290,13 @@ const server = http.createServer(async (req, res) => {
             }
             data[coll] = { ...data[coll], ...body };
             save();
+            broadcast('state', { origin: 'ui' });
             return respond(res, 200, data[coll]);
           }
           const item = sanitizeItem(coll, body);
           (coll in COLLECTIONS ? COLLECTIONS[coll](data) : []).push(item);
           save();
+          broadcast('state', { origin: 'ui' });
           return respond(res, 200, item);
         }
         if (req.method === 'PATCH' && id) {
@@ -960,6 +1310,7 @@ const server = http.createServer(async (req, res) => {
           let gameMsg = null;
           try { gameMsg = handleHeroPatch(coll, before, list[idx]); } catch (e) { console.error('hero patch:', e.message); }
           save();
+          broadcast('state', { origin: 'ui' });
           return respond(res, 200, { ...list[idx], game: gameMsg });
         }
         if (req.method === 'DELETE' && id) {
@@ -968,6 +1319,7 @@ const server = http.createServer(async (req, res) => {
             if (coll === 'finances' && data.finances?.expenses) {
               data.finances.expenses = data.finances.expenses.filter(e => e.id !== id);
               save();
+              broadcast('state', { origin: 'ui' });
               return respond(res, 200, { ok: true });
             }
           } else {
@@ -977,6 +1329,7 @@ const server = http.createServer(async (req, res) => {
             if (after.length === before) return respond(res, 404, { error: 'No encontrado' });
             data[coll] = after;
             save();
+            broadcast('state', { origin: 'ui' });
             return respond(res, 200, { ok: true });
           }
         }
