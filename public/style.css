@@ -1,7 +1,7 @@
 /* procrastin-out — marca: verde bosque satinado #0D251C/#163A2B, blanco puro y naranja #E67E22 (halos al 25%) */
 * { box-sizing: border-box; margin: 0; padding: 0; }
 :root {
-  color-scheme: light dark;
+  color-scheme: dark;
   --bg: #0D251C;
   --bg-deep: #163A2B;
   --card: rgba(22, 58, 43, 0.74);
@@ -400,6 +400,12 @@ input[type=text], input[type=number], input[type=date], input[type=time], select
 }
 body.dark input[type=text], body.dark input[type=number], body.dark input[type=date], body.dark input[type=time], body.dark select, body.dark textarea {
   background: rgba(255, 255, 255, 0.06);
+}
+/* El desplegable nativo del select lo dibuja el navegador: sin esto, en Windows
+   claro aparece con fondo blanco y texto blanco heredado → opciones invisibles. */
+select option, select optgroup {
+  background: var(--card-solid, #122e23);
+  color: var(--ink, #ffffff);
 }
 textarea { width: 100%; min-height: 64px; resize: vertical; }
 input:focus, select:focus, textarea:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 4px rgba(46, 157, 104, 0.16), 0 0 12px rgba(230, 126, 34, 0.08); }
