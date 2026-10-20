@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="es">
+<head><meta charset="UTF-8"><title>render check splash real PC</title>
+<style>body{margin:0;background:#0D251C;color:#eee;font:12px ui-monospace,monospace}pre{margin:6px 8px 12px}canvas{display:block;margin:0 6px 4px;border-radius:6px;box-shadow:0 0 0 1px rgba(255,255,255,.15)}</style>
+</head>
+<body>
+<pre id="out">componiendo vs servidor de la app real con v3 para PC 1180x1000…</pre>
+<div id="v"></div>
+<script>
+const BASE = location.origin;
+async function fetchImg(path) {
+  const r = await fetch(BASE + path, { cache: 'no-store' });
+  if (!r.ok) return { path, loadError: 'HTTP ' + r.status };
+  const blob = await r.blob();
+  const src = URL.createObjectURL(blob);
+  const im = await new Promise(r => { const i = new Image(); i.onload = () => r(i); i.onerror = () => r(null); i.src = src; });
+  URL.revokeObjectURL(src);
+  return im;
+}
+function sampleBand(ctx, yPct) {
+  const y = Math.round(ctx.canvas.height * yPct);
+  const d = ctx.getImageData(0, y, ctx.canvas.width, 1).data;
+  const n = d.length / 4;
+  let bordes = 0, grises = 0, cobre = 0, verdoso = 0;
+  const muestras = [];
+  for (let x = 0; x < n; x++) {
+    const a = d[x * 4 + 3];
+    if (a <= 20 || a >= 235) continue;
+    bordes++;
+    const r = d[x * 4], gr = d[x * 4 + 1], b = d[x * 4 + 2];
+    if (Math.max(r, gr, b) - Math.min(r, gr, b) < 28) { grises++; continue; }
+    if (r > gr + 12) cobre++;
+    else if (gr > r + 10) verdoso++;
+    if (muestras.length < 6) muestras.push({ x, a, rgb: [r, gr, b] });
+  }
+  return { bordes, grises, cobre, verdoso, muestras, pctGris: bordes ? (100 * grises / bordes).toFixed(1) + '%' : '--' };
+}
+(async () => {
+  try {
+    const bg = await fetchImg('/splash-bg.png?v=3');
+    const mk = await fetchImg('/mark-real.png?v=3');
+    const lb = await fetchImg('/label-real.png?v=3');
+    if (!(bg && mk && lb)) throw new Error('fallo carga');
+    const W = window.innerWidth, H = window.innerHeight;
+    const c = document.createElement('canvas'); c.width = W; c.height = H;
+    const g = c.getContext('2d', { alpha: false });
+    g.imageSmoothingEnabled = true; g.imageSmoothingQuality = 'high';
+    g.drawImage(bg, 0, 0, W, H);
+    const mw = mk.naturalWidth, mh = mk.naturalHeight;
+    const mkScale = 0.698 * W / mw;
+    const sw = Math.round(mw * mkScale), sh = Math.round(mh * mkScale);
+    const mkLeft = Math.round(W / 2 - sw / 2 + (W - 2 * sw / 0.698) * 0);
+    const mkTop = Math.round(0.414 * H - sh / 2 + 0);
+    g.drawImage(mk, mkLeft, mkTop, sw, sh);
+    const lw = 0.83 * W, ls = lw * lb.naturalHeight / lb.naturalWidth;
+    const lbLeft = Math.round(W / 2 - lw / 2);
+    const lbTop = Math.round(0.597 * H - ls / 2);
+    g.drawImage(lb, lbLeft, lbTop, lw, ls);
+    document.getElementById('v').appendChild(c);
+    document.getElementById('v').appendChild(document.createElement('canvas')).width = 1;
+    document.getElementById('v').appendChild(document.createElement('div')).style.height = '6px';
+    const ctx = c.getContext('2d');
+    const band = sampleBand(ctx, 0.30);
+    const crop = document.createElement('canvas'); crop.width = 160; crop.height = 72;
+    const cg = crop.getContext('2d'); cg.imageSmoothingEnabled = false;
+    cg.drawImage(c, mkLeft + 40, mkTop + 10, 160, 72, 0, 0, 160, 72);
+    document.getElementById('v').appendChild(crop);
+    document.getElementById('out').textContent =
+      'PC viewport ' + W + 'x' + H + ' (centro ' + (W/2).toFixed(0) + ',' + (H/2).toFixed(0) + ')<br>' +
+      'background splash-bg.png?v=3 natural ' + bg.naturalWidth + 'x' + bg.naturalHeight + '<br>' +
+      'marca natural ' + mk.naturalWidth + 'x' + mk.naturalHeight + ' mostrado scale ' + mkScale.toFixed(3) + ' => ' + sw + 'x' + sh + 'px<br>' +
+      'rótulo natural ' + lb.naturalWidth + 'x' + lb.naturalHeight + ' mostrado ' + lw + 'x' + ls + 'px<br>' +
+      'posición marca: left ' + mkLeft + ' top ' + mkTop + ' (centro ctx ' + Math.round(mkLeft+sw/2) + ',' + Math.round(mkTop+sh/2) + ')<br>' +
+      'posición rótulo: left ' + lbLeft + ' top ' + lbTop + ' (centro ctx ' + Math.round(lbLeft+lw/2) + ',' + Math.round(lbTop+ls/2) + ')<br>' +
+      'comparación: el centrado markup usa left:53.8% top:41.4% para marca a 69.8% width;<br>' +
+      'rótulo left:49.8% top:59.7% a 83% width; ambos con translate(-50%,-50%) — el centro visual coincide con punto %;<br>' +
+      'PC con estas fracciones puede verse desplazado si el interlineado markup no corresponde a la región de la imagen en el canvas original (esta pantalla es 1180x1000, no 390x844).<br>' +
+      'banda 30% marca (flanco flechas) ' + band.bordes + ' transiciones borde<br>' +
+      'grises: ' + band.grises + ' (' + band.pctGris + ') cobre: ' + band.cobre + ' verdoso: ' + band.verdoso + '<br>' +
+      'muestras borde: ' + band.muestras.map(m=>'x'+m.x+' a'+m.a+' rgb'+m.rgb.join(',')).join(' | ') + '<br>' +
+      'crop 160x72 1:1 borde marcado (escala x1)';
+  } catch (e) { document.getElementById('out').textContent = 'ERROR ' + e; const e2 = document.createElement('pre'); e2.textContent = String(e); document.getElementById('v').prepend(e2); }
+})();
+</script>
+</body>
+</html>

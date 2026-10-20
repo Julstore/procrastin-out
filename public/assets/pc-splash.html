@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="es">
+<head><meta charset="UTF-8"><title>prueba splash PC</title>
+<style>
+  body { margin:0; background:#0D251C; color:#eee; font:12px ui-monospace,monospace; }
+  #wrap { position:relative; width:100vw; height:100vh; background:#0D251C url('../splash-bg.png?v=3') center/100% 100% no-repeat; overflow:hidden; }
+  #art { position:absolute; inset:0; }
+  #art .mk { position:absolute; left:53.8%; top:41.4%; width:69.8%; height:auto; transform:translate(-50%,-50%); }
+  #art .lb { position:absolute; left:49.8%; top:59.7%; width:83%; height:auto; transform:translate(-50%,-50%); }
+  .cm { position:absolute; background:#4CC587; width:10px; height:10px; border-radius:50%; transform:translate(-50%,-50%); pointer-events:none; }
+  .cl { position:absolute; background:#E67E22; width:10px; height:10px; border-radius:50%; transform:translate(-50%,-50%); pointer-events:none; }
+  .cv { position:absolute; background:#9b9b9b; width:10px; height:10px; border-radius:50%; transform:translate(-50%,-50%); pointer-events:none; }
+  .guide-h { position:absolute; left:0; right:0; border-top:1px dashed rgba(255,255,255,.3); }
+  .guide-v { position:absolute; top:0; bottom:0; border-left:1px dashed rgba(255,255,255,.3); }
+  .info { position:absolute; left:8px; bottom:8px; color:#fff; background:#000a; padding:6px 8px; border-radius:6px; font-size:11px; }
+  .legend { position:absolute; top:8px; left:8px; color:#fff; background:#000a; padding:6px 8px; border-radius:6px; font-size:11px; }
+  .legend span { display:block; }
+  .legend .lg { color:#4CC587; }
+  .legend .lo { color:#E67E22; }
+  .legend .lgray { color:#9b9b9b; }
+</style>
+</head>
+<body>
+<div class="legend"><span class="lg">● marca</span><span class="lo">● rotulo</span><span class="lgray">● centro viewport</span></div>
+<div id="wrap">
+  <div id="art">
+    <img class="mk" src="../mark-real.png?v=3" alt="" width="1080" height="804">
+    <img class="lb" src="../label-real.png?v=3" alt="" width="1200" height="102">
+  </div>
+</div>
+<div class="info" id="info"></div>
+<script>
+(function () {
+  const W = window.innerWidth, H = window.innerHeight;
+  const cx = Math.round(W / 2), cy = Math.round(H / 2);
+  const mk = document.querySelector('#art .mk');
+  const lb = document.querySelector('#art .lb');
+  const wrap = document.getElementById('wrap');
+  function pos(el) {
+    if (!el) return null;
+    const r = el.getBoundingClientRect();
+    return {
+      x: Math.round(r.left + r.width / 2),
+      y: Math.round(r.top + r.height / 2),
+      w: Math.round(r.width),
+      h: Math.round(r.height),
+      offX: Math.round((r.left + r.width / 2) - cx),
+      offY: Math.round((r.top + r.height / 2) - cy),
+      nat: el.naturalWidth + 'x' + el.naturalHeight,
+    };
+  }
+  function dot(name, pos2, color) {
+    const d = document.createElement('div');
+    d.className = 'cm';
+    d.style.background = color;
+    if (!pos2) { d.style.left = cx + 'px'; d.style.top = cy + 'px'; d.title = 'centro viewport'; }
+    else { d.style.left = pos2.x + 'px'; d.style.top = pos2.y + 'px'; d.title = name + ' (' + pos2.x + ',' + pos2.y + ')'; }
+    return d;
+  }
+  if (mk) wrap.appendChild(dot('marca', pos(mk), '#4CC587'));
+  if (!mk) wrap.appendChild(dot('marca', null, '#4CC587'));
+  if (lb) wrap.appendChild(dot('rotulo', pos(lb), '#E67E22'));
+  if (!lb) wrap.appendChild(dot('rotulo', null, '#E67E22'));
+  wrap.appendChild(dot('centro', null, '#9b9b9b'));
+  wrap.appendChild(Object.assign(document.createElement('div'), { className: 'guide-h', style: 'top:' + cy + 'px' }));
+  wrap.appendChild(Object.assign(document.createElement('div'), { className: 'guide-v', style: 'left:' + cx + 'px' }));
+  const info = document.getElementById('info');
+  info.innerHTML =
+    'VIEWPORT ' + W + 'x' + H + ' centro (' + cx + ',' + cy + ')<br>' +
+    'marca existe: ' + !!mk + (mk ? ' natural ' + mk.naturalWidth + 'x' + mk.naturalHeight + ' mostrado ' + pos(mk).w + 'x' + pos(mk).h + ' centro (' + pos(mk).x + ',' + pos(mk).y + ') offset (' + pos(mk).offX + ',' + pos(mk).offY + ')' : '') + '<br>' +
+    'rotulo existe: ' + !!lb + (lb ? ' natural ' + lb.naturalWidth + 'x' + lb.naturalHeight + ' mostrado ' + pos(lb).w + 'x' + pos(lb).h + ' centro (' + pos(lb).x + ',' + pos(lb).y + ') offset (' + pos(lb).offX + ',' + pos(lb).offY + ')' : '') + '<br>' +
+    'frac CSS: mk left ' + (mk ? mk.style.left : 'n/a') + ' top ' + (mk ? mk.style.top : 'n/a') + ' lb left ' + (lb ? lb.style.left : 'n/a') + ' top ' + (lb ? lb.style.top : 'n/a') + '<br>' +
+    'transform: ' + (mk ? mk.style.transform : 'n/a') + ' ' + (lb ? lb.style.transform : 'n/a') + '<br>' +
+    'NOTA: en PC con 16:9 u other-than-3:9 las fracciones 53.8%/41.4% / 49.8%/59.7% tienden a desplazar el centro si la proporción del viewport no respeta 390x844 — el offset indica cuanto.';
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,17 @@
+/* Splash de marca para PC: arte real centrado en el centro visual del viewport.
+   Rescala con vmin para que no se estire en pantallas anchas ni se sature en
+   pantallas pequeñas; el fondo se cubre con center/100% 100%. */
+.pc-splash { position: fixed; inset: 0; z-index: 9999; overflow: hidden;
+  background: #0D251C url('splash-bg.png?v=3') center/100% 100% no-repeat; }
+.pc-splash .art { position: absolute; inset: 0;
+  animation: pcSplashIn .9s cubic-bezier(.22,.9,.28,1) both; }
+.pc-splash .mk { position: absolute; left: 50%; top: 50%;
+  transform: translate(-50%, -50%);
+  width: min(52vmin, 620px); height: auto; }
+.pc-splash .lb { position: absolute; left: 50%;
+  top: calc(50% + min(52vmin, 620px));
+  transform: translateX(-50%);
+  width: min(60vmin, 560px); height: auto; }
+.pc-splash.off { opacity: 0; transition: opacity .35s ease; pointer-events: none; }
+@keyframes pcSplashIn { from { opacity: 0; transform: scale(.86); } to { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: reduce) { .pc-splash .art { animation: none; } }

@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>procrastin-out · HUD</title>
+  <link rel="stylesheet" href="hud.css">
+</head>
+<body>
+  <!-- HUD tipo Iron Man: overlay transparente sobre el escritorio (Electron).
+       También se puede abrir en el navegador para depurar: /hud.html -->
+  <div class="hud" id="hud">
+    <div class="glow" aria-hidden="true"></div>
+
+    <header class="top">
+      <span class="dot" aria-hidden="true"></span>
+      <strong class="brand">procrastin-out</strong>
+      <span class="drag" aria-hidden="true">HUD</span>
+      <button class="mini" id="hudPin" type="button" aria-pressed="false" title="Dejar los clics fijos (o Ctrl+Alt+M)" aria-label="Fijar los clics del HUD">fijar clics</button>
+      <button class="mini" id="hudHide" type="button" title="Ocultar el HUD (Ctrl+Alt+H para volver)" aria-label="Ocultar el HUD">ocultar</button>
+    </header>
+
+    <section class="core" aria-label="Nivel y progreso del día">
+      <svg class="ring" viewBox="0 0 132 132" role="img" aria-labelledby="hudRingLabel">
+        <title id="hudRingLabel">Progreso del nivel y avance general del día</title>
+        <circle class="ring-track" cx="66" cy="66" r="56"></circle>
+        <circle class="ring-xp" id="xpRing" cx="66" cy="66" r="56"></circle>
+        <circle class="ring-track inner" cx="66" cy="66" r="42"></circle>
+        <circle class="ring-day" id="dayRing" cx="66" cy="66" r="42"></circle>
+        <circle class="ring-voice" cx="66" cy="66" r="64"></circle>
+      </svg>
+      <div class="core-text">
+        <span class="lvl" id="hudLevel">Nv 1</span>
+        <span class="sub" id="hudXp">0/100 XP</span>
+        <span class="sub mood" id="hudMood">En espera</span>
+      </div>
+    </section>
+
+    <section class="stats" aria-label="Pendientes de hoy">
+      <div class="stat"><span class="k">HOY</span><span class="v" id="hudToday">0</span></div>
+      <div class="stat"><span class="k">VENCIDAS</span><span class="v" id="hudOverdue">0</span></div>
+      <div class="stat"><span class="k">HÁBITOS</span><span class="v" id="hudHabits">0</span></div>
+      <div class="stat"><span class="k">RACHA</span><span class="v" id="hudStreak">0</span></div>
+    </section>
+
+    <section class="pomo" id="hudPomo" hidden aria-live="off">
+      <span class="pomo-time" id="hudPomoTime">00:00</span>
+      <span class="pomo-label" id="hudPomoLabel">Enfoque</span>
+      <span class="pomo-ring" aria-hidden="true"><i id="pomoBar"></i></span>
+    </section>
+
+    <section class="voice" aria-live="polite">
+      <div class="wave" aria-hidden="true"><span></span><span></span><span></span><span></span><span></span></div>
+      <div class="voice-text">
+        <span class="state" id="hudVoiceState">en espera</span>
+        <p class="say" id="hudSay">Esperando a Jarvis…</p>
+        <p class="hear" id="hudHear" hidden></p>
+      </div>
+      <button class="mini" id="hudMic" type="button" aria-pressed="false" title="Escuchar el micrófono de esta PC" aria-label="Usar el micrófono de esta PC">mic</button>
+    </section>
+  </div>
+  <script src="hud.js"></script>
+</body>
+</html>

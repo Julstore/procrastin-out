@@ -158,6 +158,31 @@ body::after {
 }
 .subtitle { color: var(--muted); font-size: 13px; margin-left: 4px; }
 .status-cluster { margin-left: auto; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; justify-content: flex-end; }
+.agent-status {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  min-width: 178px;
+  padding: 7px 11px;
+  border: 1px solid var(--line-strong);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.035);
+}
+.agent-status-dot {
+  width: 9px;
+  height: 9px;
+  flex: 0 0 auto;
+  border-radius: 50%;
+  background: var(--muted);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--muted) 15%, transparent);
+}
+.agent-status-copy { display: grid; gap: 2px; min-width: 0; }
+.agent-status-copy strong { font-size: 11px; line-height: 1.2; white-space: nowrap; }
+.agent-status-copy small { max-width: 210px; overflow: hidden; color: var(--muted); font-size: 9px; line-height: 1.2; text-overflow: ellipsis; white-space: nowrap; }
+.agent-status[data-agent-state="running"] .agent-status-dot { background: var(--success); box-shadow: 0 0 0 3px rgba(30, 158, 87, .17), 0 0 10px rgba(76, 197, 135, .45); }
+.agent-status[data-agent-state="stale"] .agent-status-dot { background: var(--accent-2); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent-2) 15%, transparent); }
+.agent-status[data-agent-state="offline"] .agent-status-dot { background: var(--danger); box-shadow: 0 0 0 3px color-mix(in srgb, var(--danger) 15%, transparent); }
+.agent-status[data-agent-state="unknown"] .agent-status-dot { background: var(--muted); }
 
 /* Insignia de progreso general: muta de rojo a verde según lo completado */
 .prog-badge {
@@ -195,6 +220,23 @@ body.dark .prog-wrap { background: rgba(255, 255, 255, 0.12); }
   cursor: default;
   backdrop-filter: blur(8px);
 }
+.ui-icon {
+  width: 1.15em;
+  height: 1.15em;
+  display: inline-block;
+  flex: 0 0 auto;
+  vertical-align: -0.18em;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.ui-icon.nav-icon { width: 18px; height: 18px; }
+.ui-icon.mood-icon { width: 17px; height: 17px; stroke-width: 2.6; }
+.mood-light { display: inline-grid; place-items: center; width: 18px; height: 18px; color: var(--mood); }
+.mood-light .mood-icon { color: var(--mood); }
+
 #themeToggle {
   width: 42px; height: 42px;
   border-radius: 50%;
@@ -203,10 +245,20 @@ body.dark .prog-wrap { background: rgba(255, 255, 255, 0.12); }
   color: var(--ink);
   cursor: pointer;
   font-size: 18px;
+  display: inline-grid;
+  place-items: center;
   box-shadow: var(--shadow-soft);
   transition: transform .18s ease, border-color .18s ease, box-shadow .18s ease;
 }
 #themeToggle:hover { transform: rotate(-8deg) scale(1.04); border-color: var(--accent); box-shadow: 0 8px 20px rgba(230, 126, 34, 0.22); }
+.icon-definitions { position: absolute; width: 0; height: 0; overflow: hidden; }
+.ui-icon { color: var(--accent-hot); }
+h2 > .ui-icon { width: 1em; height: 1em; color: var(--accent); }
+h3 > .ui-icon { width: 1em; height: 1em; color: var(--accent); }
+.icon-btn .ui-icon { width: 16px; height: 16px; color: inherit; }
+.hist-list .ui-icon, .meta .ui-icon, strong .ui-icon { width: 1.05em; height: 1.05em; }
+#flyingXp .ui-icon { color: currentColor; }
+.meta .ui-icon { color: var(--muted); }
 
 /* Pestañas */
 .tabs {
@@ -274,6 +326,11 @@ nav button.active {
   background: linear-gradient(135deg, var(--accent), var(--accent-2));
   box-shadow: 0 10px 22px rgba(230, 126, 34, 0.25);
 }
+nav [role="tab"] .nav-icon { color: var(--accent-hot); transition: transform .18s ease, color .18s ease; }
+nav [role="tab"].active .nav-icon { color: #fff; transform: scale(1.08); }
+.dock .ui-icon { width: 18px; height: 18px; }
+.lvl-chip .ui-icon { color: var(--gold); }
+.fxp .ui-icon { width: 18px; height: 18px; }
 
 /* Escenario y tarjetas */
 .stage { position: relative; z-index: 1; }
@@ -403,6 +460,12 @@ button.icon-btn:hover { color: var(--danger); border-color: rgba(210, 52, 44, 0.
 /* Calendario de hábitos */
 .habit-row { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
 .habit-name { font-weight: 800; font-size: 15px; min-width: 155px; display: flex; align-items: center; gap: 8px; }
+.habit-icon-picker { display: inline-flex; align-items: center; gap: 5px; padding: 4px; border: 1px solid var(--line); border-radius: 14px; background: rgba(0, 0, 0, 0.12); max-width: 100%; overflow-x: auto; }
+.habit-icon-choice { display: inline-grid; place-items: center; width: 38px; height: 38px; flex: 0 0 auto; border: 1px solid transparent; border-radius: 10px; background: transparent; color: var(--muted); cursor: pointer; transition: color .15s ease, background .15s ease, border-color .15s ease, transform .15s ease; }
+.habit-icon-choice .ui-icon { width: 20px; height: 20px; }
+.habit-icon-choice:hover { color: var(--accent-hot); transform: translateY(-1px); }
+.habit-icon-choice.selected { color: #fff; border-color: var(--accent); background: linear-gradient(135deg, var(--accent), var(--accent-2)); box-shadow: 0 4px 12px rgba(46, 157, 104, .28); }
+.habit-icon-picker:focus-within { border-color: var(--accent); }
 .streak {
   font-size: 12px; color: #fff; font-weight: 800; white-space: nowrap;
   background: linear-gradient(135deg, #2f8a5c, #c8742f);
@@ -419,7 +482,7 @@ button.icon-btn:hover { color: var(--danger); border-color: rgba(210, 52, 44, 0.
 body.dark .cal-day { background: rgba(255, 255, 255, 0.05); }
 .cal-day:hover { border-color: var(--accent); transform: scale(1.08); box-shadow: 0 6px 16px rgba(230, 126, 34, 0.18); }
 .cal-day.on { background: linear-gradient(135deg, var(--success), #63d68d); border-color: transparent; box-shadow: 0 6px 14px rgba(30, 158, 87, 0.35); }
-.cal-day.on::after { content: '✓'; color: #fff; font-size: 11px; position: absolute; font-weight: 900; }
+.cal-day.on::after { content: ''; width: 9px; height: 5px; border-left: 2px solid #fff; border-bottom: 2px solid #fff; position: absolute; transform: rotate(-45deg) translate(1px, -1px); }
 .cal-day.today { outline: 2px solid var(--accent); outline-offset: 1px; }
 .cal-day.empty { visibility: hidden; }
 .future { opacity: .35; cursor: default !important; }
@@ -446,7 +509,7 @@ body.dark .progress-bar { background: rgba(255, 255, 255, 0.12); }
 }
 .wg:hover { transform: scale(1.08); }
 .wg.filled { background: linear-gradient(135deg, #1f9fd6, #6fd3ff); border-color: transparent; color: #fff; box-shadow: 0 6px 14px rgba(31, 159, 214, 0.4); }
-.wg.filled::after { content: '💧'; }
+.wg.filled::after { content: ''; width: 13px; height: 13px; border: 2px solid currentColor; border-radius: 70% 20% 70% 70%; transform: rotate(45deg) translate(-1px, -1px); }
 
 /* Salud */
 .stats-grid { display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 16px; }
@@ -540,8 +603,8 @@ footer button, .dock button {
 body.dark footer button, body.dark .dock button { background: rgba(255, 255, 255, 0.06); }
 footer button:hover, .dock button:hover { transform: translateY(-1px); border-color: var(--accent); box-shadow: 0 8px 20px rgba(230, 126, 34, 0.22); }
 .dock button { display: inline-flex; align-items: center; gap: 7px; }
-.dock button span[aria-hidden] { line-height: 1; }
 #saveState { margin-left: auto; font-size: 12px; color: var(--muted); white-space: nowrap; }
+#saveState .ui-icon { color: var(--success); vertical-align: -0.2em; }
 #saveState { margin-left: auto; }
 
 /* Logros */
@@ -572,9 +635,15 @@ footer button:hover, .dock button:hover { transform: translateY(-1px); border-co
   box-shadow: var(--shadow-soft);
   transition: transform .16s ease;
 }
-.badge:hover { transform: translateY(-2px); }
-.badge.locked { opacity: .58; border-style: dashed; }
-.badge .bem { font-size: 30px; filter: drop-shadow(0 6px 10px rgba(0, 0, 0, 0.18)); }
+.badge:hover { transform: translateY(-3px); border-color: rgba(224, 162, 74, .55); box-shadow: 0 16px 34px rgba(0, 0, 0, .26), 0 0 22px rgba(224, 162, 74, .12); }
+.badge.locked { opacity: .68; border-style: dashed; background: linear-gradient(145deg, var(--card), rgba(128, 143, 134, .08)); }
+.badge .bem { display: grid; place-items: center; min-height: 48px; margin-bottom: 4px; }
+.badge .bem .ui-icon { width: 38px; height: 38px; padding: 7px; color: #ffe1a0; border: 1px solid rgba(255, 216, 143, .48); border-radius: 14px; background: linear-gradient(145deg, rgba(224, 162, 74, .42), rgba(46, 157, 104, .22)); filter: drop-shadow(0 4px 7px rgba(224, 162, 74, .24)); }
+.badge.locked .bem .ui-icon { color: var(--muted); border-color: var(--line-strong); background: linear-gradient(145deg, rgba(143, 168, 154, .16), rgba(255, 255, 255, .04)); filter: none; }
+.badge:not(.locked) { border-color: rgba(224, 162, 74, .32); background: linear-gradient(150deg, var(--card), rgba(224, 162, 74, .075)); }
+.badge.locked .bname { color: var(--muted); }
+.habit-name > .ui-icon, .habit-name > .habit-custom-mark { width: 18px; height: 18px; color: var(--accent); }
+.habit-custom-mark { display: inline-grid; place-items: center; min-width: 18px; font-size: 16px; line-height: 1; }
 .badge .bname { font-weight: 800; font-size: 13.5px; margin: 6px 0 3px; }
 .hist-list { list-style: none; }
 .hist-list li {
@@ -694,11 +763,13 @@ body[data-tab="rewards"] { --accent: #E89A3C; }
 
 /* Semáforo de ambiente: el color lo pone --mood según lo pendiente */
 #moodLabel { font-size: 15px; line-height: 1; filter: saturate(1.2); }
+.due-panel .meta .ui-icon { color: var(--accent); }
+.icon-btn { display: inline-grid; place-items: center; min-width: 32px; min-height: 32px; }
 .prog-badge { transition: background 0.8s ease, border-color 0.8s ease, transform 0.18s ease; }
-body[data-mood="rojo"] .brand-sub::after { content: " · 🔴 EN ROJO"; }
-body[data-mood="naranja"] .brand-sub::after { content: " · 🟠 EN NARANJA"; }
-body[data-mood="amarillo"] .brand-sub::after { content: " · 🟡 EN AMARILLO"; }
-body[data-mood="verde"] .brand-sub::after { content: " · 🟢 EN VERDE"; }
+body[data-mood="rojo"] .brand-sub::after { content: " · EN ROJO"; }
+body[data-mood="naranja"] .brand-sub::after { content: " · EN NARANJA"; }
+body[data-mood="amarillo"] .brand-sub::after { content: " · EN AMARILLO"; }
+body[data-mood="verde"] .brand-sub::after { content: " · EN VERDE"; }
 
 /* Modal celular */
 .phone-modal { position: fixed; inset: 0; z-index: 200; display: grid; place-items: center; padding: 18px; }

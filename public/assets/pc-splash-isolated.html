@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>Splash PC — definición y centering</title>
+<link rel="stylesheet" href="styles/pc-splash.css">
+</head>
+<body>
+  <div class="pc-splash" aria-hidden="true">
+    <div class="art">
+      <img class="mk" src="mark-real.png?v=3" alt="" width="1080" height="804" fetchpriority="high" decoding="async">
+      <img class="lb" src="label-real.png?v=3" alt="" width="1200" height="102" fetchpriority="high" decoding="async">
+    </div>
+  </div>
+  <pre id="info"></pre>
+  <script>
+    (function(){
+      const s = document.querySelector('.pc-splash');
+      const mk = s.querySelector('.mk');
+      const lb = s.querySelector('.lb');
+      function sizes(img){
+        const r = img.getBoundingClientRect();
+        return img.naturalWidth+'x'+img.naturalHeight+' => rendered '+
+          Math.round(r.width)+'x'+Math.round(r.height)+
+          ' @ top='+r.top.toFixed(1)+' left='+r.left.toFixed(1);
+      }
+      function report(){
+        const vw = Math.round(self.innerWidth), vh = Math.round(self.innerHeight);
+        const sr = s.getBoundingClientRect();
+        const stage = 'stage rect: '+Math.round(sr.width)+'x'+Math.round(sr.height)+
+          ' @ '+sr.top.toFixed(1)+','+sr.left.toFixed(1);
+        const splash = 'splash rect: '+Math.round(sr.width)+'x'+Math.round(sr.height)+
+          ' @ '+sr.top.toFixed(1)+','+sr.left.toFixed(1);
+        const mark = sizes(mk);
+        const label = sizes(lb);
+        document.getElementById('info').textContent =
+          'viewport: '+vw+'x'+vh+'\n'+stage+'\n'+splash+'\n'+mark+'\n'+label;
+      }
+      window.addEventListener('load', report);
+      window.addEventListener('resize', report);
+      report();
+    })();
+  </script>
+</body>
+</html>

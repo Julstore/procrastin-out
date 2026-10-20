@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>inspección splash real</title>
+<style>
+  body { margin:0; background:#0D251C; color:#eee; font:12px ui-monospace,monospace; }
+  #wrap { position:relative; width:100vw; height:100vh; background:#0D251C url('../splash-bg.png?v=3') center/100% 100% no-repeat; overflow:hidden; }
+  #art { position:absolute; inset:0; }
+  #art .mk { position:absolute; left:53.8%; top:41.4%; width:69.8%; height:auto; transform:translate(-50%,-50%); }
+  #art .lb { position:absolute; left:49.8%; top:59.7%; width:83%; height:auto; transform:translate(-50%,-50%); }
+  .guide { position:absolute; pointer-events:none; }
+  .guide.h { left:0; right:0; border-top:1px dashed rgba(255,255,255,.35); }
+  .guide.v { top:0; bottom:0; border-left:1px dashed rgba(255,255,255,.35); }
+  .nose { position:absolute; background:#000a; color:#fff; font-size:11px; padding:2px 4px; border-radius:3px; pointer-events:none; white-space:pre; }
+  #out { position:fixed; top:8px; right:8px; background:#000a; color:#8fd; padding:8px; border-radius:8px; max-width:360px; font-size:11px; }
+  #out b { color:#fff; }
+  #legend { position:fixed; top:8px; left:8px; background:#000a; color:#8fd; font-size:11px; padding:8px; border-radius:8px; max-width:260px; }
+  #legend span.l { display:block; padding:1px 0; }
+</style>
+</head>
+<body>
+<div id="legend"><b>leyenda</b><span class="l" style="color:#4CC587">— centro marca (green)</span><span class="l" style="color:#E67E22">— centro rótulo (orange)</span><span class="l" style="color:#9b9b9b">— centro viewport (gray)</span></div>
+<div id="wrap">
+  <div id="art">
+    <img class="mk" src="../mark-real.png?v=3" alt="" width="1080" height="804">
+    <img class="lb" src="../label-real.png?v=3" alt="" width="1200" height="102">
+  </div>
+</div>
+<div id="out"></div>
+<script>
+const W = window.innerWidth, H = window.innerHeight;
+const mk = document.querySelector('#art .mk'), lb = document.querySelector('#art .lb');
+function info(el, name, color){
+  const r = el.getBoundingClientRect();
+  const c = { x: Math.round(r.left + r.width/2), y: Math.round(r.top + r.height/2) };
+  const v = { x: Math.round(W/2), y: Math.round(H/2) };
+  const off = { x: c.x - v.x, y: c.y - v.y };
+  return { name, w: r.width.toFixed(0), h: r.height.toFixed(0), c, off, v, nat: el.naturalWidth+'x'+el.naturalHeight };
+}
+function mkdiv(obj, cssClass){
+  const d = document.createElement('div');
+  d.style.cssText = 'position:absolute;background:'+cssClass+';width:6px;height:6px;border-radius:50%;transform:translate(-50%,-50%);pointer-events:none;';
+  d.style.left = obj.c.x + 'px'; d.style.top = obj.c.y + 'px';
+  d.title = obj.name + ' ('+obj.c.x+','+obj.c.y+')';
+  return d;
+}
+function nose(obj, color){
+  const n = document.createElement('div'); n.className='nose';
+  n.style.background = color === '#9b9b9b' ? '#000a' : 'transparent';
+  n.style.color = '#fff';
+  n.style.left = (obj.c.x+4) + 'px'; n.style.top = (obj.c.y+4) + 'px';
+  n.textContent = obj.name.toUpperCase() + ' (' + obj.c.x + ',' + obj.c.y + ')';
+  if (obj.name === 'viewport') { n.style.background = '#000a'; } else { n.style.background = 'transparent'; }
+  return n;
+}
+function divInfo(obj){
+  const d = document.createElement('div'); d.style.position='absolute'; d.style.left='8px'; d.style.bottom='8px';
+  d.style.color='#fff'; d.style.background='#000a'; d.style.padding='4px 6px'; d.style.borderRadius='6px'; d.style.fontSize='11px';
+  d.innerHTML = obj.name.toUpperCase() + ': (' + obj.c.x + ',' + obj.c.y + ') vs viewport (' + obj.v.x + ',' + obj.v.y + ') off(' + obj.off.x + ',' + obj.off.y + ')';
+  return d;
+}
+const vInfo = { name: 'viewport', c: { x: Math.round(W/2), y: Math.round(H/2) }, v: { x: Math.round(W/2), y: Math.round(H/2) }, off: { x:0, y:0 } };
+const out = document.getElementById('out');
+setTimeout(() => {
+  const mkInfo = info(mk,'marca','#4CC587');
+  const lbInfo = info(lb,'rotulo','#E67E22');
+  wrap.appendChild(mkdiv(vInfo,'#9b9b9b'));
+  wrap.appendChild(mkdiv(mkInfo,'#4CC587'));
+  wrap.appendChild(mkdiv(lbInfo,'#E67E22'));
+  wrap.appendChild(nose(vInfo,'#9b9b9b'));
+  wrap.appendChild(nose(mkInfo,'#4CC587'));
+  wrap.appendChild(nose(lbInfo,'#E67E22'));
+  wrap.appendChild(divInfo(vInfo));
+  wrap.appendChild(divInfo(mkInfo));
+  wrap.appendChild(divInfo(lbInfo));
+  const g = document.createElement('div'); g.className='guide v'; g.style.left = (W/2)+'px'; wrap.appendChild(g);
+  const gh = document.createElement('div'); gh.className='guide h'; gh.style.top = (H/2)+'px'; wrap.appendChild(gh);
+  out.innerHTML = 'VIEWPORT ' + W + 'x' + H + '<br>' +
+    '<b>marca</b> ' + mkInfo.w + 'x' + mkInfo.h + ' natural ' + mkInfo.nat + ' centro (' + mkInfo.c.x + ',' + mkInfo.c.y + ')<br>' +
+    '<b>rotulo</b> ' + lbInfo.w + 'x' + lbInfo.h + ' natural ' + lbInfo.nat + ' centro (' + lbInfo.c.x + ',' + lbInfo.c.y + ')<br>' +
+    '<b>offset marca</b> (' + mkInfo.off.x + ',' + mkInfo.off.y + ') px del centro<br>' +
+    '<b>offset rótulo</b> (' + lbInfo.off.x + ',' + lbInfo.off.y + ') px del centro<br>' +
+    'frac actual: mk left ' + mk.style.left + ' top ' + mk.style.top + '<br>' +
+    'frac actual: lb left ' + lb.style.left + ' top ' + lb.style.top + '<br>' +
+    'el centrado es por transform: translate(-50%,-50%), por lo que el centro visual de cada imagen coincide con su punto de anclaje %';
+}, 350);
+</script>
+</body>
+</html>

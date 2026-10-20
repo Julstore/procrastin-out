@@ -1,0 +1,256 @@
+/* HUD de procrastin-out — overlay transparente.
+   El fondo es del escritorio: acá solo se pinta el panel. */
+
+:root {
+  --hud-bg: rgba(8, 26, 19, 0.72);
+  --hud-edge: rgba(76, 197, 135, 0.38);
+  --hud-edge-hot: rgba(76, 197, 135, 0.85);
+  --hud-ink: #EAF6EF;
+  --hud-ink-soft: #9DBCAC;
+  --hud-accent: #4CC587;
+  --hud-accent-deep: #2E9D68;
+  --hud-warn: #E89A3C;
+  --mood: #4CC587;
+  --mood-2: #7FE0AC;
+  /* Nivel de voz 0..1 (lo mueve el HUD desde el stream de Jarvis o el micrófono local) */
+  --voice: 0;
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  height: 100%;
+  background: transparent;
+  overflow: hidden;
+  -webkit-user-select: none;
+  user-select: none;
+  font-family: 'Manrope', 'Segoe UI', system-ui, sans-serif;
+  color: var(--hud-ink);
+}
+
+.hud {
+  position: relative;
+  display: grid;
+  grid-template-columns: 132px 1fr;
+  grid-template-rows: auto auto auto auto;
+  gap: 10px 12px;
+  margin: 6px;
+  padding: 12px 14px 12px;
+  border: 1px solid var(--hud-edge);
+  border-radius: 18px;
+  background: var(--hud-bg);
+  backdrop-filter: blur(9px) saturate(1.15);
+  -webkit-backdrop-filter: blur(9px) saturate(1.15);
+  box-shadow: 0 18px 40px rgba(0, 0, 0, 0.45), inset 0 1px 0 rgba(255, 255, 255, 0.06);
+  transition: border-color .35s ease, box-shadow .35s ease;
+  animation: hud-in .5s ease both;
+}
+
+/* Resplandor que respira; cambia de color según el ambiente (rojo → verde). */
+.glow {
+  position: absolute;
+  inset: -2px;
+  border-radius: 20px;
+  pointer-events: none;
+  background: radial-gradient(120% 90% at 15% 0%, color-mix(in srgb, var(--mood) 34%, transparent), transparent 62%);
+  opacity: calc(.6 + var(--voice) * .4);
+  transform: scale(calc(1 + var(--voice) * .05));
+  transform-origin: 50% 50%;
+  animation: breathe 6s ease-in-out infinite;
+  transition: transform .12s linear, opacity .12s linear;
+}
+
+@keyframes breathe { 0%, 100% { opacity: .55; } 50% { opacity: .9; } }
+@keyframes hud-in { from { opacity: 0; transform: translateY(8px) scale(.985); } to { opacity: 1; transform: none; } }
+
+/* --- Barra superior (zona de arrastre del overlay) --- */
+.top {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  -webkit-app-region: drag;
+}
+.brand {
+  font-size: 11px;
+  letter-spacing: .16em;
+  text-transform: uppercase;
+  color: var(--hud-ink-soft);
+}
+.drag {
+  flex: 1;
+  text-align: right;
+  font-size: 9px;
+  letter-spacing: .22em;
+  color: color-mix(in srgb, var(--hud-ink-soft) 60%, transparent);
+}
+.dot {
+  width: 8px; height: 8px;
+  border-radius: 50%;
+  background: var(--mood);
+  box-shadow: 0 0 10px var(--mood);
+}
+.mini {
+  -webkit-app-region: no-drag;
+  border: 1px solid var(--hud-edge);
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--hud-ink-soft);
+  font: inherit;
+  font-size: 10px;
+  padding: 3px 8px;
+  border-radius: 999px;
+  cursor: pointer;
+}
+.mini:hover { color: var(--hud-ink); border-color: var(--hud-edge-hot); }
+/* Los botones solo existen en Electron: en el navegador no hay IPC. */
+body:not([data-electron]) .mini { display: none; }
+body[data-pinned="1"] #hudPin { color: var(--hud-ink); border-color: var(--hud-edge-hot); background: rgba(76, 197, 135, 0.18); }
+
+/* --- Anillos --- */
+.core { position: relative; grid-column: 1; grid-row: 2 / 5; display: grid; place-items: center; align-self: center; }
+.ring { width: 132px; height: 132px; transform: rotate(-90deg); }
+.ring circle { fill: none; stroke-linecap: round; }
+.ring-track { stroke: rgba(255, 255, 255, 0.09); stroke-width: 7; }
+.ring-track.inner { stroke-width: 5; }
+.ring-xp { stroke: var(--hud-accent); stroke-width: 7; transition: stroke-dashoffset .7s ease; filter: drop-shadow(0 0 6px color-mix(in srgb, var(--hud-accent) 60%, transparent)); }
+.ring-day { stroke: var(--mood); stroke-width: 5; transition: stroke-dashoffset .7s ease; }
+/* Aro externo: late con la voz (escuchar, pensar, hablar). */
+.ring-voice {
+  stroke: var(--hud-accent);
+  stroke-width: 2;
+  opacity: calc(.12 + var(--voice) * .75);
+  transition: opacity .12s linear, stroke .3s ease;
+}
+.core-text {
+  position: absolute;
+  display: grid;
+  justify-items: center;
+  gap: 1px;
+  text-align: center;
+}
+.lvl { font-size: 20px; font-weight: 800; letter-spacing: .01em; }
+.sub { font-size: 10px; color: var(--hud-ink-soft); letter-spacing: .06em; }
+.mood { color: var(--mood); text-transform: uppercase; letter-spacing: .14em; }
+
+/* --- Métricas --- */
+.stats {
+  grid-column: 2;
+  grid-row: 2;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px 10px;
+  align-content: start;
+}
+.stat {
+  display: flex;
+  flex-direction: column;
+  padding: 6px 9px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 11px;
+  background: rgba(255, 255, 255, 0.03);
+}
+.stat .k { font-size: 8.5px; letter-spacing: .18em; color: var(--hud-ink-soft); }
+.stat .v { font-size: 17px; font-weight: 800; }
+.stat .v.warn { color: var(--hud-warn); }
+
+/* --- Pomodoro --- */
+/* `display: grid` pisaría el atributo hidden de la UA: hay que restaurarlo. */
+.pomo[hidden] { display: none; }
+.pomo {
+  grid-column: 2;
+  grid-row: 3;
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 2px 10px;
+  align-items: center;
+  padding: 6px 9px;
+  border: 1px solid color-mix(in srgb, var(--hud-accent) 45%, transparent);
+  border-radius: 11px;
+  background: rgba(76, 197, 135, 0.09);
+}
+.pomo-time { font-size: 20px; font-weight: 800; font-variant-numeric: tabular-nums; }
+.pomo-label { font-size: 10px; color: var(--hud-ink-soft); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pomo-ring { grid-column: 1 / -1; height: 3px; border-radius: 3px; background: rgba(255, 255, 255, 0.12); overflow: hidden; }
+.pomo-ring i { display: block; height: 100%; width: 100%; background: linear-gradient(90deg, var(--hud-accent-deep), var(--hud-accent)); }
+
+/* --- Voz / última respuesta --- */
+.voice {
+  grid-column: 2;
+  grid-row: 4;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  min-width: 0;
+}
+.voice-text { min-width: 0; flex: 1; display: grid; gap: 2px; }
+.wave { display: flex; align-items: flex-end; gap: 3px; height: 22px; }
+/* Cada barra usa el nivel actual: sube con la voz y vuelve sola al silencio.
+   Se escala con transform (no con height) para que no provoque layout: solo composición. */
+.wave span {
+  width: 3px;
+  height: 20px;
+  border-radius: 2px;
+  background: var(--hud-accent);
+  transform: scaleY(calc(.25 + var(--voice) * .75 * var(--amp, 1)));
+  transform-origin: bottom;
+  opacity: calc(.45 + var(--voice) * .55);
+  transition: transform .1s linear, opacity .1s linear;
+}
+.wave span:nth-child(1), .wave span:nth-child(5) { --amp: .55; }
+.wave span:nth-child(2), .wave span:nth-child(4) { --amp: .8; }
+.state {
+  font-size: 8.5px;
+  letter-spacing: .18em;
+  text-transform: uppercase;
+  color: var(--hud-ink-soft);
+}
+.hear {
+  margin: 0;
+  font-size: 10.5px;
+  font-style: italic;
+  color: var(--hud-ink-soft);
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+/* Estado de la voz: el acento del HUD cambia según lo que está haciendo Jarvis. */
+body[data-voice="listening"] { --hud-accent: #4CC587; }
+body[data-voice="thinking"] { --hud-accent: #E89A3C; }
+body[data-voice="speaking"] { --hud-accent: #7FE0AC; }
+body[data-voice="listening"] .state,
+body[data-voice="thinking"] .state,
+body[data-voice="speaking"] .state { color: var(--hud-accent); }
+body[data-mic="1"] #hudMic { color: var(--hud-ink); border-color: var(--hud-edge-hot); background: rgba(76, 197, 135, 0.18); }
+body[data-pulse="1"] .wave span { opacity: 1; animation: bar .55s ease-in-out 3; }
+body[data-pulse="1"] .wave span:nth-child(2) { animation-delay: .06s; }
+body[data-pulse="1"] .wave span:nth-child(3) { animation-delay: .12s; }
+body[data-pulse="1"] .wave span:nth-child(4) { animation-delay: .18s; }
+body[data-pulse="1"] .wave span:nth-child(5) { animation-delay: .24s; }
+@keyframes bar { 0%, 100% { height: 6px; } 50% { height: 19px; } }
+
+.say {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.35;
+  color: var(--hud-ink);
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+}
+
+/* Estado de espera / sin sesión */
+body[data-state="waiting"] .hud { border-color: rgba(232, 154, 60, 0.5); }
+body[data-state="waiting"] .dot { background: var(--hud-warn); box-shadow: 0 0 10px var(--hud-warn); }
+body[data-state="waiting"] .say { color: var(--hud-warn); }
+/* El fondo del escritorio se ve a través: el panel no debe pintar html/body. */
+body[data-electron] .hud { margin: 8px; }
+
+@media (prefers-reduced-motion: reduce) {
+  .hud { animation: none; }
+  .glow { animation: none; }
+  body[data-pulse="1"] .wave span { animation: none; }
+  .ring-xp, .ring-day { transition: none; }
+  .wave span, .glow, .ring-voice { transition: none; }
+}

@@ -1,0 +1,84 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>md5 probe — solo archivos actuales</title>
+<style>html,body{margin:0;font-family:system-ui;background:#0D251C;color:#cfe9cf}
+pre{font:12px/1.4 monospace;padding:8px;border-radius:6px}
+table{width:100%;border-collapse:collapse}
+td,th{border:1px solid #22332a;padding:6px 8px}
+.ok{color:#7fca7f} .bad{color:#ff7a7a}</style>
+</head>
+<body>
+<h1>md5 probe — qué archivos estoy descargando en realidad</h1>
+<p id="verdict"></p>
+<table>
+  <tr><th>archivo</th><th>url usada</th><th>Content-Length</th><th>bytes descargados</th><th>md5head</th></tr>
+  <tbody id="rows">
+    <tr><td colspan="5">bajando…</td></tr>
+  </tbody>
+</table>
+<pre id="raw"></pre>
+<script>
+(async () => {
+  const names = ['splash-bg.png','mark-real.png','label-real.png','icon-192.png','splash-real.png','icon-512.png','icon-180.png','icon-maskable-512.png'];
+  const q3 = '?v=3';
+  const base = location.origin + '/';
+  const rows = document.getElementById('rows');
+  const raw = document.getElementById('raw');
+  const verdictEl = document.getElementById('verdict');
+  const expected = {
+    'splash-bg.png':'6fca255b',
+    'mark-real.png':'9204643b',
+    'label-real.png':'d959693f',
+    'icon-192.png':'0c67ead1',
+    'splash-real.png':'0dc3b16b',
+    'icon-512.png':'d02c4b1c',
+    'icon-180.png':'9ba8a9af',
+    'icon-maskable-512.png':'6d6725ff'
+  };
+  let txt = '';
+  let allOk = true;
+  const results = {};
+  for (const n of names){
+    const u = base + n + q3;
+    let row = document.createElement('tr');
+    let cells = '';
+    try {
+      const r = await fetch(u, { cache: 'no-store' });
+      const len = r.headers.get('content-length');
+      const buf = await r.arrayBuffer();
+      const bytes = new Uint8Array(buf);
+      let h = 0;
+      for (let i = 0; i + 4 <= bytes.length; i += 4){
+        const mp = bytes[i] | (bytes[i+1]<<8) | (bytes[i+2]<<16) | (bytes[i+3]<<24);
+        h = Math.imul(h + mp, 31) >>> 0;
+      }
+      const hex = h.toString(16).padStart(8,'0');
+      results[n] = { bytes: bytes.length, md5head: hex };
+      const exp = expected[n] || '—';
+      const ok = exp === '—' || exp === hex;
+      cells = '<td>' + n + '</td>' +
+        '<td>' + u + '</td>' +
+        '<td>' + (len ?? '—') + '</td>' +
+        '<td>' + bytes.length + '</td>' +
+        '<td class="' + (ok ? 'ok' : 'bad') + '">' + hex + (exp !== '—' ? ' (esperado '+exp+')' : '') + '</td>';
+      row.innerHTML = cells;
+      rows.appendChild(row);
+      txt += 'url: ' + u + '\n  status=' + r.status + ' len=' + (len ?? '—') + ' bytes=' + bytes.length + ' md5head=' + hex + '\n';
+      if (!ok) allOk = false;
+    } catch (e){
+      cells = '<td>' + n + '</td><td colspan="4" class="bad">error: ' + (e && e.message ? e.message : e) + '</td>';
+      row.innerHTML = cells;
+      rows.appendChild(row);
+      txt += 'url: ' + u + ' error: ' + (e && e.message ? e.message : e) + '\n';
+      allOk = false;
+    }
+  }
+  if (allOk) verdictEl.textContent = 'Los archivos v3 se descargaron sin error y coinciden con .hushdown.';
+  else verdictEl.textContent = 'Alguno no se pudo bajar o no coincide.';
+  raw.textContent = 'bytes por archivo:\n' + Object.entries(results).map(([k,v]) => '  ' + k + ' = ' + v.bytes + ' B ; md5head=' + v.md5head).join('\n') + '\n\n' + txt;
+})();
+</script>
+</body>
+</html>

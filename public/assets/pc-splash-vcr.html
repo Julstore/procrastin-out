@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>PC splash — v 집값이 아니라 측정</title>
+<style>
+  .pc-splash { position: fixed; inset: 0; z-index: 9999; overflow: hidden;
+    background: #0D251C url('splash-bg.png?v=3') center/100% 100% no-repeat; }
+  .pc-splash .art { position: absolute; inset: 0;
+    animation: pcSplashIn .9s cubic-bezier(.22,.9,.28,1) both; }
+  .pc-splash .mk { position: absolute; left: 50%; top: 50%;
+    transform: translate(-50%, -50%);
+    width: min(52vmin, 620px); height: auto; }
+  .pc-splash .lb { position: absolute; left: 50%;
+    top: calc(50% + min(52vmin, 620px) + 8px);
+    transform: translateX(-50%);
+    width: min(60vmin, 560px); height: auto; }
+  .pc-splash.off { opacity: 0; transition: opacity .35s ease; pointer-events: none; }
+  @keyframes pcSplashIn { from { opacity: 0; transform: scale(.86); } to { opacity: 1; transform: none; } }
+  @media (prefers-reduced-motion: reduce) { .pc-splash .art { animation: none; } }
+  html,body{margin:0}
+  pre{font:12px/1.4 monospace;background:#0d251c;color:#7fca7f;padding:8px;border-radius:6px}
+</style>
+</head>
+<body>
+  <div class="pc-splash" aria-hidden="true">
+    <div class="art">
+      <img class="mk" src="mark-real.png?v=3" alt="" width="1080" height="804" fetchpriority="high" decoding="async">
+      <img class="lb" src="label-real.png?v=3" alt="" width="1200" height="102" fetchpriority="high" decoding="async">
+    </div>
+  </div>
+  <pre id="info"></pre>
+  <script>
+    (function(){
+      const s = document.querySelector('.pc-splash');
+      const mk = s.querySelector('.mk');
+      const lb = s.querySelector('.lb');
+      function sizes(img){
+        const r = img.getBoundingClientRect();
+        return img.naturalWidth+'x'+img.naturalHeight+' => rendered '+
+          Math.round(r.width)+'x'+Math.round(r.height)+
+          ' @ top='+r.top.toFixed(1)+' left='+r.left.toFixed(1);
+      }
+      function report(){
+        const vw = Math.round(self.innerWidth), vh = Math.round(self.innerHeight);
+        const sr = s.getBoundingClientRect();
+        const stage = 'stage rect: '+Math.round(sr.width)+'x'+Math.round(sr.height)+
+          ' @ '+sr.top.toFixed(1)+','+sr.left.toFixed(1);
+        const splash = 'splash rect: '+Math.round(sr.width)+'x'+Math.round(sr.height)+
+          ' @ '+sr.top.toFixed(1)+','+sr.left.toFixed(1);
+        const mark = sizes(mk);
+        const label = sizes(lb);
+        document.getElementById('info').textContent =
+          'viewport: '+vw+'x'+vh+'\n'+stage+'\n'+splash+'\n'+mark+'\n'+label;
+      }
+      window.addEventListener('load', report);
+      window.addEventListener('resize', report);
+      report();
+    })();
+  </script>
+</body>
+</html>

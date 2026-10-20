@@ -8,8 +8,8 @@
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <link rel="manifest" href="manifest.webmanifest">
-<link rel="icon" type="image/png" sizes="192x192" href="icon-192.png?v=2">
-<link rel="apple-touch-icon" href="icon-180.png?v=2">
+<link rel="icon" type="image/png" sizes="192x192" href="icon-192.png?v=3">
+<link rel="apple-touch-icon" href="icon-180.png?v=3">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Unbounded:wght@500;700;800;900&family=Manrope:wght@400;500;600;700;800&display=swap">
@@ -32,25 +32,37 @@ button:hover { filter:brightness(1.05); transform:translateY(-1px); }
 .err.shake { animation: shake .28s ease; }
 @keyframes shake { 25% { transform: translateX(-5px); } 50% { transform: translateX(5px); } 75% { transform: translateX(-3px); } }
 a { color:var(--muted); font-size:13px; }
-/* Splash de marca: el mismo arte real que la app, surgiendo desde el centro. */
-#poutSplash { position:fixed; inset:0; z-index:9999; overflow:hidden; background:#0D251C url('splash-bg.png?v=2') center/100% 100% no-repeat; }
-#poutSplash .art { position:absolute; inset:0; animation:poutSplashIn .9s cubic-bezier(.22,.9,.28,1) both; }
-#poutSplash .mk { position:absolute; left:53.8%; top:41.4%; width:69.8%; height:auto; transform:translate(-50%,-50%); }
-#poutSplash .lb { position:absolute; left:49.8%; top:59.7%; width:83%; height:auto; transform:translate(-50%,-50%); }
-#poutSplash.off { opacity:0; transition:opacity .35s ease; pointer-events:none; }
-@keyframes poutSplashIn { from { opacity:0; transform:scale(.86); } to { opacity:1; transform:none; } }
+/* Splash responsive compartido con la app; no rasteriza ni estira un lienzo completo. */
+#poutSplash { position:fixed; inset:0; z-index:9999; overflow:hidden; background:#0D251C; }
+#poutSplash::before, #poutSplash::after { content:""; position:absolute; pointer-events:none; border-radius:50%; filter:blur(56px); background:rgba(230,126,34,.18); }
+#poutSplash::before { width:min(42vw,520px); aspect-ratio:1; left:-14vw; top:-20vh; }
+#poutSplash::after { width:min(44vw,560px); aspect-ratio:1; right:-16vw; bottom:-24vh; }
+#poutSplash .art { position:absolute; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:center;
+  gap:clamp(8px,1.8vh,16px); padding:24px; animation:poutSplashIn .6s cubic-bezier(.22,.9,.28,1) both; }
+#poutSplash .art::before { content:""; position:absolute; z-index:-1; width:min(72vw,700px); height:min(52vh,500px); border-radius:50%; background:rgba(230,126,34,.12); filter:blur(56px); }
+#poutSplash .mk, #poutSplash .lb { display:block; height:auto; max-width:100%; object-fit:contain; image-rendering:auto; }
+#poutSplash .mk { width:min(54vw,34vh,430px); max-height:38vh; }
+#poutSplash .lb { width:min(66vw,38vh,480px); max-height:12vh; }
+#poutSplash.off { opacity:0; transition:opacity .3s ease; pointer-events:none; }
+@keyframes poutSplashIn { from { opacity:0; transform:scale(.96); } to { opacity:1; transform:none; } }
+@media (max-width:600px) {
+  #poutSplash .art { gap:clamp(8px,1.5vh,12px); padding:max(16px,env(safe-area-inset-top)) 20px max(16px,env(safe-area-inset-bottom)); }
+  #poutSplash .mk { width:min(72vw,32vh,340px); max-height:34vh; }
+  #poutSplash .lb { width:min(76vw,34vh,360px); max-height:10vh; }
+}
 @media (prefers-reduced-motion: reduce) { #poutSplash .art { animation:none; } }
 </style>
+<script src="cache-guard.js?v=2" defer></script>
 </head>
 <body>
 <div id="poutSplash" aria-hidden="true">
   <div class="art">
-    <img class="mk" src="mark-real.png?v=2" alt="" width="239" height="178">
-    <img class="lb" src="label-real.png?v=2" alt="" width="246" height="21">
+    <img class="mk" src="mark-real.png?v=3" alt="" width="1080" height="804" fetchpriority="high" decoding="async">
+    <img class="lb" src="label-real.png?v=3" alt="" width="1200" height="102" fetchpriority="high" decoding="async">
   </div>
 </div>
 <div class="box">
-  <div class="mark"><img src="icon-192.png?v=2" alt="procrastin-out"></div>
+  <div class="mark"><img src="icon-192.png?v=3" alt="procrastin-out"></div>
   <h1>procrastin-out</h1>
   <p class="sub" id="sub">Comprobando...</p>
   <div id="form"></div>
@@ -89,6 +101,8 @@ async function init(){
     $('#p').onkeydown = e => { if(e.key==='Enter') go(); };
     $('#p').focus();
   } else {
+    const cambiarPin = new URLSearchParams(location.search).has('change-pin');
+    if (!cambiarPin) { location.replace('/'); return; }
     $('#sub').textContent = 'Sesión iniciada. Puedes cambiar tu PIN.';
     $('#back').hidden = false;
     $('#form').innerHTML = pinField('c','PIN actual') + pinField('p1','PIN nuevo') + pinField('p2','Repite el PIN nuevo') + '<button id="go">Cambiar PIN</button>';

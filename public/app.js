@@ -11,6 +11,9 @@ let mealDate = today();     // día mostrado en alimentación
 let commitFilter = 'all';   // filtro de compromisos por persona
 let pomo = { itemId: null, mode: 'focus', secs: 25 * 60, running: false, timer: null };
 const POMO_LEN = { focus: 25 * 60, brk: 5 * 60 };
+const HABIT_ICONS = ['habits', 'health', 'tasks', 'water', 'book', 'target', 'body', 'sparkle', 'leaf', 'paw', 'mountain', 'music', 'flower'];
+const HABIT_ICON_LABELS = { habits: 'Racha', health: 'Salud', tasks: 'Tareas', water: 'Agua', book: 'Lectura', target: 'Meta', body: 'Movimiento', sparkle: 'Bienestar', leaf: 'Naturaleza', paw: 'Mascota', mountain: 'Aventura', music: 'Música', flower: 'Cuidado personal' };
+const ICON = (name, extraClass = '') => `<svg class="ui-icon${extraClass ? ' ' + extraClass : ''}" aria-hidden="true"><use href="#icon-${name}"></use></svg>`;
 function fmtClock(s) { s = Math.max(0, Math.round(s)); return String(Math.floor(s / 60)).padStart(2, '0') + ':' + String(s % 60).padStart(2, '0'); }
 
 // --- RPG helpers ---
@@ -46,11 +49,11 @@ function moodFor(pct) {
   const col = `hsl(${hue.toFixed(1)}, 78%, 45%)`;
   const col2 = `hsl(${((hue + 22) % 360).toFixed(1)}, 88%, 55%)`;
   const soft = `hsla(${hue.toFixed(1)}, 85%, 45%, 0.14)`;
-  let name = 'rojo', emoji = '🔴';
-  if (p >= 70) { name = 'verde'; emoji = '🟢'; }
-  else if (p >= 45) { name = 'amarillo'; emoji = '🟡'; }
-  else if (p >= 20) { name = 'naranja'; emoji = '🟠'; }
-  return { p, hue, col, col2, soft, name, emoji };
+  let name = 'rojo';
+  if (p >= 70) name = 'verde';
+  else if (p >= 45) name = 'amarillo';
+  else if (p >= 20) name = 'naranja';
+  return { p, hue, col, col2, soft, name };
 }
 // Compat: antes era un array de 5 colores, ahora delega en el semáforo continuo.
 function progressColor(pct) { return moodFor(pct).col; }
@@ -62,13 +65,13 @@ function updateProgressBadge() {
   pill.style.background = m.soft;
   pill.style.borderColor = m.col;
   const empty = !D.tasks.length && !D.habits.length && !D.commitments.length;
-  pill.title = empty ? 'Añade tareas, hábitos o compromisos para empezar a progresar' : (m.p >= 100 ? '¡Todo realizado! 🟢' : `Progreso general: ${m.p}% · ${m.emoji} ${m.name} — completa todo y la app se vuelve verde`);
+  pill.title = empty ? 'Añade tareas, hábitos o compromisos para empezar a progresar' : (m.p >= 100 ? '¡Todo realizado!' : `Progreso general: ${m.p}% · ${m.name} — completa todo y la app se vuelve verde`);
   const pctEl = $('#progPct');
   if (pctEl) { pctEl.textContent = m.p + '%'; pctEl.style.color = m.col; }
   const fill = $('#progFill');
   if (fill) { fill.style.width = m.p + '%'; fill.style.background = `linear-gradient(90deg, ${m.col}, ${m.col2})`; }
   const dot = $('#moodLabel');
-  if (dot) { dot.textContent = m.emoji; dot.title = `Ambiente: ${m.name} (${m.p}% completado)`; }
+  if (dot) { dot.className = `mood-light mood-${m.name}`; dot.title = `Ambiente: ${m.name} (${m.p}% completado)`; dot.setAttribute('aria-label', dot.title); }
   const root = document.documentElement;
   root.style.setProperty('--mood', m.col);
   root.style.setProperty('--mood-2', m.col2);
@@ -77,7 +80,7 @@ function updateProgressBadge() {
   root.style.setProperty('--accent-progress', m.col);
   document.body.dataset.mood = m.name;
   const chip = $('#lvlChip');
-  if (chip) chip.textContent = `⭐ Nv ${D.hero?.level || 1}${D.hero?.streak ? ' · 🔥' + D.hero.streak : ''}`;
+  if (chip) chip.innerHTML = `<svg class="ui-icon" aria-hidden="true"><use href="#icon-star"></use></svg> Nv ${D.hero?.level || 1}${D.hero?.streak ? ` · <svg class="ui-icon" aria-hidden="true"><use href="#icon-habits"></use></svg>${D.hero.streak}` : ''}`;
 }
 // ---------- Modal "usar en el celular" (misma red WiFi) ----------
 window.openPhoneModal = async function () {
@@ -91,7 +94,7 @@ window.openPhoneModal = async function () {
     const urls = (lan.urls || []).map(u => `<code>${esc(u)}</code>`).join('');
     if (box) box.innerHTML = !urls ? '<p class="meta">No se encontró dirección. Verifica que la PC tenga WiFi activo.</p>'
       : lan.cloud
-        ? `<p class="meta">Tu nube ☁️: abre esta dirección en el celular <strong>desde donde sea</strong> e instálala como app:</p>${urls}<p class="meta">Chrome Android: menú ⋮ → “Agregar a pantalla principal”. iPhone: Compartir → “Agregar a inicio”.</p>`
+        ? `<p class="meta">Tu nube ${ICON('cloud')}: abre esta dirección en el celular <strong>desde donde sea</strong> e instálala como app:</p>${urls}<p class="meta">Chrome Android: menú ⋮ → “Agregar a pantalla principal”. iPhone: Compartir → “Agregar a inicio”.</p>`
         : `<p class="meta">Con el celular en la <strong>misma WiFi</strong>, abre una de estas direcciones en Chrome/Safari e instálala como app:</p>${urls}<p class="meta">Chrome Android: menú ⋮ → “Agregar a pantalla principal”. iPhone: Compartir → “Agregar a inicio”. La PC debe estar encendida con la app abierta.</p>`;
   } catch (e) {
     if (box) box.innerHTML = `<p class="meta">No se pudo obtener la dirección: ${esc(e.message || 'error')}</p>`;
@@ -101,7 +104,7 @@ window.closePhoneModal = function () { const modal = $('#phoneModal'); if (modal
 function showXp(xp, title, leveledUp, newLv) {
   const wrap = document.createElement('div');
   wrap.className = 'fxp' + (leveledUp ? ' lvlup' : '');
-  wrap.innerHTML = (leveledUp ? `🎉 ¡${esc(title || '')}` : `⭐ +${xp} XP · ${esc(title || '')}`);
+  wrap.innerHTML = `${ICON(leveledUp ? 'trophy' : 'star')} ${leveledUp ? '¡' : '+' + xp + ' XP · '}${esc(title || '')}`;
   $('#flyingXp').appendChild(wrap);
   setTimeout(() => wrap.remove(), 3800);
 }
@@ -109,7 +112,7 @@ function showBadges(list) {
   for (const b of list || []) {
     const wrap = document.createElement('div');
     wrap.className = 'fxp lvlup';
-    wrap.innerHTML = `🏅 ¡Insignia: ${esc(b.name || b.id)}!`;
+    wrap.innerHTML = `${ICON('medal')} ¡Insignia: ${esc(b.name || b.id)}!`;
     $('#flyingXp').appendChild(wrap);
     setTimeout(() => wrap.remove(), 4200);
   }
@@ -120,12 +123,12 @@ function toastGame(g) {
   if (g.freezeSaved) {
     const wrap = document.createElement('div');
     wrap.className = 'fxp lvlup';
-    wrap.innerHTML = '❄️ ¡Streak Freeze! Tu racha sobrevivió a un día en blanco';
+    wrap.innerHTML = `${ICON('freeze')} ¡Streak Freeze! Tu racha sobrevivió a un día en blanco`;
     $('#flyingXp').appendChild(wrap);
     setTimeout(() => wrap.remove(), 4200);
   }
   if (g.newBadges?.length) showBadges(g.newBadges);
-  if (g.leveledUp) showXp(0, `¡Nivel ${g.newLevel} alcanzado! 🏆`, true, g.newLevel);
+  if (g.leveledUp) showXp(0, `¡Nivel ${g.newLevel} alcanzado!`, true, g.newLevel);
   else if (g.xp > 0) {
     const t = g.titles?.length ? g.titles.join(' · ') : (g.title || '');
     showXp(g.xp, t, false, 0);
@@ -155,8 +158,8 @@ function maybeNotify(force) {
   const n = tasks.length + coms.length + appts.length;
   if (!n) return;
   sessionStorage.setItem('pout-notified', '1');
-  const lines = [...tasks.slice(0, 3).map(t => '✅ ' + t.title), ...coms.slice(0, 2).map(c => '🤝 ' + c.title), ...appts.slice(0, 2).map(a => '🩺 ' + a.title)];
-  try { new Notification(`🥊 procrastin-out: ${n} pendiente${n > 1 ? 's' : ''} hoy`, { body: lines.join('\n') }); } catch (_) {}
+  const lines = [...tasks.slice(0, 3).map(t => 'Tarea: ' + t.title), ...coms.slice(0, 2).map(c => 'Compromiso: ' + c.title), ...appts.slice(0, 2).map(a => 'Cita: ' + a.title)];
+  try { new Notification(`procrastin-out: ${n} pendiente${n > 1 ? 's' : ''} hoy`, { body: lines.join('\n') }); } catch (_) {}
 }
 // PATCH con soporte de recompensa
 async function patch(coll, id, body) {
@@ -213,11 +216,137 @@ async function reload(opts = {}) {
   updateProgressBadge();
   maybeNotify(false);
   if (!opts.silent) {
-    $('#saveState').textContent = '✓ Guardado ' + new Date().toLocaleTimeString('es', { hour: '2-digit', minute: '2-digit' });
+    $('#saveState').innerHTML = `${ICON('check')} Guardado ${new Date().toLocaleTimeString('es', { hour: '2-digit', minute: '2-digit' })}`;
     setTimeout(() => { $('#saveState').textContent = ''; }, 2500);
   }
 }
 
+
+// ---------- Eventos del agente (Jarvis) ----------
+// Jarvis escribe por HTTP; acá la app se entera sin recargar la página.
+let agentRefreshPending = false;
+function busyEditing() {
+  const el = document.activeElement;
+  return !!el && !!$('#app') && $('#app').contains(el) && /^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName);
+}
+async function refreshFromAgent() {
+  if (busyEditing()) { agentRefreshPending = true; return; } // no borrar lo que la persona está escribiendo
+  agentRefreshPending = false;
+  await reload({ silent: true });
+}
+function applyPomodoroEvent(d) {
+  if (d.running) {
+    const minutes = Math.max(1, Math.min(180, parseInt(d.minutes, 10) || 25));
+    clearInterval(pomo.timer);
+    pomo.mode = 'focus';
+    pomo.secs = minutes * 60;
+    pomo.plannedMinutes = minutes;
+    pomo.endAt = Date.now() + pomo.secs * 1000;
+    pomo.running = true;
+    pomo.timer = setInterval(pomoTick, 500);
+    if (d.label && D.learning?.length) {
+      const q = String(d.label).toLowerCase();
+      const hit = D.learning.find(l => String(l.title || '').toLowerCase().includes(q));
+      if (hit) pomo.itemId = hit.id;
+    }
+    if (!pomo.itemId && D.learning?.length) pomo.itemId = D.learning[0].id;
+    tab = 'learning';
+    setTabActive(tab);
+    render();
+  } else {
+    clearInterval(pomo.timer);
+    pomo.running = false;
+    pomo.endAt = null;
+    pomo.secs = POMO_LEN[pomo.mode];
+    render();
+  }
+}
+const agentStatusEl = $('#agentStatus');
+let agentLastActionAt = 0;
+let agentLastAction = '';
+let agentHeartbeatAt = 0;
+let agentHeartbeatTtlMs = 15_000;
+function formatAgentAge(at) {
+  if (!at) return 'Sin actividad registrada';
+  const elapsed = Math.max(0, Date.now() - at);
+  if (elapsed < 10_000) return 'hace unos segundos';
+  if (elapsed < 60_000) return `hace ${Math.floor(elapsed / 1000)} s`;
+  if (elapsed < 3_600_000) return `hace ${Math.floor(elapsed / 60_000)} min`;
+  return `hace ${Math.floor(elapsed / 3_600_000)} h`;
+}
+function paintAgentStatus(agent = {}) {
+  if (!agentStatusEl) return;
+  if (Object.hasOwn(agent, 'heartbeatAt')) agentHeartbeatAt = Number(agent.heartbeatAt) || 0;
+  if (Object.hasOwn(agent, 'lastActionAt')) agentLastActionAt = Number(agent.lastActionAt) || 0;
+  if (typeof agent.lastAction === 'string') agentLastAction = agent.lastAction;
+  agentHeartbeatTtlMs = Number(agent.heartbeatTtlMs) || agentHeartbeatTtlMs;
+  const alive = !!agent.running && agentHeartbeatAt > 0 && Date.now() - agentHeartbeatAt <= agentHeartbeatTtlMs;
+  const state = alive ? 'running' : agentHeartbeatAt ? 'stale' : 'offline';
+  agentStatusEl.dataset.agentState = state;
+  const label = $('#agentStatusLabel');
+  if (label) label.textContent = state === 'running' ? 'Jarvis en ejecución' : state === 'stale' ? 'Jarvis sin respuesta' : 'Jarvis sin conexión';
+  const action = $('#agentLastAction');
+  if (action) action.textContent = agentLastAction
+    ? `${agentLastAction} · ${formatAgentAge(agentLastActionAt)}`
+    : formatAgentAge(agentLastActionAt);
+  agentStatusEl.title = state === 'running'
+    ? `Último pulso ${formatAgentAge(agentHeartbeatAt)}${agent.instances > 1 ? ` · ${agent.instances} instancias` : ''}`
+    : 'Jarvis dejó de enviar heartbeat';
+}
+function connectAgentEvents() {
+  if (!('EventSource' in window)) return;
+  let stateRefreshTimer = null;
+  let es;
+  try { es = new EventSource('/api/agent/events'); } catch (_) { return; }
+  es.addEventListener('hello', (e) => {
+    let d = {}; try { d = JSON.parse(e.data); } catch (_) { /* evento sin datos */ }
+    paintAgentStatus(d.agent || {});
+  });
+  es.addEventListener('agent-status', (e) => {
+    let d = {}; try { d = JSON.parse(e.data); } catch (_) { /* evento sin datos */ }
+    if (d.origin === 'agent') paintAgentStatus(d.agent || {});
+  });
+  es.addEventListener('state', (e) => {
+    // Cualquier estado nuevo refresca, sin importar quién escribió: esta misma
+    // ventana, otra ventana/celu abierta, Jarvis por comando, Jarvis via el espejo
+    // (PUT con sesión: llega con origin 'ui') o una escritura del servidor.
+    // Filtrar por 'origin === agent' dejaba vivo un bug: anotes hechas desde otro
+    // cliente no aparecían hasta recargar la app. El debounce corta ráfagas
+    // (varias escrituras juntas = una sola recarga) y busyEditing (adentro de
+    // refreshFromAgent) evita pisar lo que la persona está escribiendo.
+    if (stateRefreshTimer) return;
+    stateRefreshTimer = setTimeout(() => { stateRefreshTimer = null; refreshFromAgent(); }, 250);
+  });
+  es.addEventListener('reward', (e) => {
+    let d = {}; try { d = JSON.parse(e.data); } catch (_) { /* evento sin datos */ }
+    if (d.origin === 'agent' && d.game) toastGame(d.game);
+  });
+  es.addEventListener('nav', (e) => {
+    let d = {}; try { d = JSON.parse(e.data); } catch (_) { /* evento sin datos */ }
+    if (d.origin !== 'agent' || !d.tab) return;
+    tab = d.tab;
+    setTabActive(tab);
+    render();
+  });
+  es.addEventListener('pomodoro', (e) => {
+    let d = {}; try { d = JSON.parse(e.data); } catch (_) { /* evento sin datos */ }
+    if (d.origin !== 'agent') return;
+    applyPomodoroEvent(d);
+  });
+  es.addEventListener('error', () => {
+    if (agentStatusEl) {
+      agentStatusEl.dataset.agentState = 'unknown';
+      const label = $('#agentStatusLabel');
+      if (label) label.textContent = 'Sin conexión con la app';
+    }
+  });
+  // EventSource reintenta solo si se corta la conexión.
+}
+setInterval(() => {
+  if (!agentStatusEl) return;
+  paintAgentStatus({ running: agentHeartbeatAt > 0 && Date.now() - agentHeartbeatAt <= agentHeartbeatTtlMs, heartbeatAt: agentHeartbeatAt, lastActionAt: agentLastActionAt, lastAction: agentLastAction });
+}, 5_000);
+document.addEventListener('focusout', () => { if (agentRefreshPending) refreshFromAgent(); });
 
 // ---------- Helpers de hábitos ----------
 function habitCheck(h, dateKey) { return !!h.log?.[dateKey]; }
@@ -365,11 +494,11 @@ function weekPanel() {
     const pend = D.tasks.filter(t => !t.done).length;
     return `<div class="card due-panel">
       <div class="row" style="justify-content:space-between;flex-wrap:wrap;gap:8px">
-        <strong>📅 Plan de la semana</strong>
-        <button class="btn small" onclick="createWeek()" ${pend ? '' : 'disabled'}>➕ Armar mi semana${pend ? ` (${pend} pendientes)` : ''}</button>
+        <strong>${ICON('calendar')} Plan de la semana</strong>
+        <button class="btn small" onclick="createWeek()" ${pend ? '' : 'disabled'}>${ICON('check-square')} Armar mi semana${pend ? ` (${pend} pendientes)` : ''}</button>
       </div>
       <p class="meta">Fija las tareas de esta semana: su % ya no baja cuando agregues tareas nuevas. Al completarla toda, la reclamas y suma XP extra.</p>
-      ${pastWeeks().length ? `<div class="meta">Semanas cerradas: ${pastWeeks().map(x => `✅ ${esc(x.title)}`).join(' · ')}</div>` : ''}
+      ${pastWeeks().length ? `<div class="meta">Semanas cerradas: ${pastWeeks().map(x => `${ICON('check')} ${esc(x.title)}`).join(' · ')}</div>` : ''}
     </div>`;
   }
   const ts = weekTasks(w);
@@ -378,13 +507,13 @@ function weekPanel() {
   const allDone = ts.length > 0 && ts.every(t => t.done);
   return `<div class="card due-panel">
     <div class="row" style="justify-content:space-between;flex-wrap:wrap;gap:8px">
-      <strong>📅 ${esc(w.title)}</strong>
-      <span class="meta" style="color:${m.col};font-weight:800">${m.emoji} ${pct}%</span>
+      <strong>${ICON('calendar')} ${esc(w.title)}</strong>
+      <span class="meta" style="color:${m.col};font-weight:800">${ICON('mood')} ${pct}%</span>
     </div>
     <div class="progress-bar" style="margin:8px 0"><div style="width:${pct}%;background:linear-gradient(90deg, ${m.col}, ${m.col2})"></div></div>
     ${allDone
-      ? `<div class="row" style="gap:8px;flex-wrap:wrap"><span>🎉 <strong>¡Semana completa!</strong></span><button class="btn small" onclick="claimWeek('${w.id}')">✅ Cerrar semana (+XP)</button></div>`
-      : `<p class="meta">${ts.filter(t => t.done).length}/${ts.length} tareas · el check pasa de 🔴 a 🟢 a medida que cumplís</p>`}
+      ? `<div class="row" style="gap:8px;flex-wrap:wrap"><span>${ICON('sparkle')} <strong>¡Semana completa!</strong></span><button class="btn small" onclick="claimWeek('${w.id}')">${ICON('check')} Cerrar semana (+XP)</button></div>`
+      : `<p class="meta">${ts.filter(t => t.done).length}/${ts.length} tareas · el indicador de progreso avanza a medida que cumplís</p>`}
     ${ts.map(t => `
       <div class="row" style="gap:8px;margin-top:4px">
         <input type="checkbox" ${t.done ? 'checked' : ''} onchange="patch('tasks','${t.id}',{done:${t.done ? 'false' : 'true'}})">
@@ -430,20 +559,20 @@ function viewTasks() {
   const globalPending = pending.filter(t => !inWeek.has(t.id));
   const done = D.tasks.filter(t => t.done);
   return `
-    <h2>✅ Tareas</h2>
+    <h2>${ICON('tasks')} Tareas</h2>
     ${(() => {
       const dd = dueItems();
       const n = dd.tasks.length + dd.coms.length + dd.appts.length;
-      const rows = [...dd.tasks.map(t => ['✅', t.title, t.due]), ...dd.coms.map(c => ['🤝', c.title, c.date]), ...dd.appts.map(a => ['🩺', a.title, a.date])];
+      const rows = [...dd.tasks.map(t => ['tasks', t.title, t.due]), ...dd.coms.map(c => ['commitment', c.title, c.date]), ...dd.appts.map(a => ['health', a.title, a.date])];
       return `<div class="card due-panel">
         <div class="row" style="justify-content:space-between;flex-wrap:wrap;gap:8px">
-          <strong>⏰ Para hoy${n ? ` (${n})` : ''}</strong>
+          <strong>${ICON('clock')} Para hoy${n ? ` (${n})` : ''}</strong>
           <span class="row" style="gap:6px">
-            ${notifOn() ? '<span class="meta">🔔 avisos activos</span>' : '<button class="btn ghost small" onclick="enableNotif()">🔔 Activar avisos</button>'}
-            <button class="btn ghost small" onclick="askStrategy()">🧭 Briefing con IA</button>
+            ${notifOn() ? `<span class="meta">${ICON('bell')} avisos activos</span>` : `<button class="btn ghost small" onclick="enableNotif()">${ICON('bell')} Activar avisos</button>`}
+            <button class="btn ghost small" onclick="askStrategy()">${ICON('compass')} Briefing con IA</button>
           </span>
         </div>
-        ${n ? `<ul class="hist-list">${rows.map(([e, t, d]) => `<li><span>${e}</span> ${esc(t)} <span class="meta">${d < today() ? '⚠️ vencido ' : ''}${fmtDate(d)}</span></li>`).join('')}</ul>` : '<p class="meta">Nada vencido. Activa los avisos y te avisaré al abrir la app.</p>'}
+        ${n ? `<ul class="hist-list">${rows.map(([icon, t, d]) => `<li><span>${ICON(icon)}</span> ${esc(t)} <span class="meta">${d < today() ? ICON('alert') + ' vencido ' : ''}${fmtDate(d)}</span></li>`).join('')}</ul>` : '<p class="meta">Nada vencido. Activa los avisos y te avisaré al abrir la app.</p>'}
         <div id="stratOut" class="ai-out" hidden></div>
       </div>`;
     })()}
@@ -455,27 +584,27 @@ function viewTasks() {
       <button class="btn" onclick="addTask()">Añadir</button>
     </div>
     ${weekPanel()}
-    <h3>🌍 Metas globales <span class="meta">(sin plazo semanal · también dan XP y suben de nivel)</span></h3>
-    ${globalPending.length ? '' : '<p class="meta">Nada fuera de la semana. 🎉</p>'}
+    <h3>Metas globales <span class="meta">(sin plazo semanal · también dan XP y suben de nivel)</span></h3>
+    ${globalPending.length ? '' : `<p class="meta">Nada fuera de la semana. ${ICON('sparkle')}</p>`}
     ${globalPending.map(t => `
       <div class="card">
         <div class="row">
           <input type="checkbox" onchange="patch('tasks','${t.id}',{done:true})">
           <span class="title">${esc(t.title)}</span>
           <span class="priority ${t.priority}">${t.priority}</span>
-          <span class="meta">${esc(t.area)}${t.due ? ' · 📅 ' + fmtDate(t.due) + (isOverdue(t.due) ? ' ⚠️' : '') : ''}</span>
+          <span class="meta">${esc(t.area)}${t.due ? ' · ' + ICON('calendar') + ' ' + fmtDate(t.due) + (isOverdue(t.due) ? ' ' + ICON('alert') : '') : ''}</span>
           ${w ? `<button class="btn ghost small" onclick="addToWeek('${t.id}')" title="Sumarla al plan de la semana">＋ semana</button>` : ''}
-          <button class="icon-btn" onclick="del('tasks','${t.id}')">🗑</button>
+          <button class="icon-btn" onclick="del('tasks','${t.id}')" aria-label="Eliminar tarea">${ICON('trash')}</button>
         </div>
       </div>`).join('')}
-    ${weekPending.length ? `<p class="meta" style="margin-top:8px">📌 ${weekPending.length} pendiente(s) ya están en el plan de la semana (se tildan arriba).</p>` : ''}
+    ${weekPending.length ? `<p class="meta" style="margin-top:8px">${ICON('tasks')} ${weekPending.length} pendiente(s) ya están en el plan de la semana (se tildan arriba).</p>` : ''}
     ${done.length ? `<h3>Completadas (${done.length})</h3>
       ${done.map(t => `
         <div class="card done">
           <div class="row">
             <input type="checkbox" checked onchange="patch('tasks','${t.id}',{done:false})">
             <span class="title">${esc(t.title)}</span>
-            <button class="icon-btn" onclick="del('tasks','${t.id}')">🗑</button>
+            <button class="icon-btn" onclick="del('tasks','${t.id}')" aria-label="Eliminar tarea">${ICON('trash')}</button>
           </div>
         </div>`).join('')}` : ''}
   `;
@@ -503,28 +632,28 @@ function viewHabits() {
     return `
       <div class="card">
         <div class="habit-row">
-          <div class="habit-name">${esc(h.emoji || '')} ${esc(h.name)}
-            <span class="streak">🔥${streak} · ${wk}/${h.targetPerWeek}</span>
+          <div class="habit-name">${ICON(HABIT_ICONS.includes(h.emoji) ? h.emoji : 'habits')} ${esc(h.name)}
+            <span class="streak">${ICON('habits')} ${streak} · ${wk}/${h.targetPerWeek}</span>
           </div>
           <div class="cal">${cells}</div>
           <div class="habit-actions">
-            <button class="icon-btn" onclick="del('habits','${h.id}')">🗑</button>
+            <button class="icon-btn" onclick="del('habits','${h.id}')" aria-label="Eliminar hábito">${ICON('trash')}</button>
           </div>
         </div>
       </div>`;
   }).join('');
   return `
-    <h2>🔥 Hábitos</h2>
+    <h2>${ICON('habits')} Hábitos</h2>
     <div class="inline-add">
       <input type="text" id="h-name" placeholder="Ej: caminar 30 min" onkeydown="if(event.key==='Enter')addHabit()">
-      <input type="text" id="h-emoji" placeholder="Emoji" style="width:70px">
+      <div class="habit-icon-picker" role="group" aria-label="Elige un icono para el hábito">${HABIT_ICONS.map((icon, i) => `<button class="habit-icon-choice ${i === 0 ? 'selected' : ''}" type="button" data-habit-icon="${icon}" aria-label="${HABIT_ICON_LABELS[icon]}" aria-pressed="${i === 0 ? 'true' : 'false'}" title="${HABIT_ICON_LABELS[icon]}">${ICON(icon)}</button>`).join('')}<input type="hidden" id="h-emoji" value="habits"></div>
       <select id="h-target">${[3,4,5,6,7].map(n => `<option value="${n}">${n}/sem</option>`).join('')}</select>
       <button class="btn" onclick="addHabit()">Añadir</button>
     </div>
     <div class="row" style="justify-content: space-between; margin-bottom: 12px;">
-      <button class="btn ghost small" onclick="habitOffset--;render()">◀ Anterior</button>
+      <button class="btn ghost small" onclick="habitOffset--;render()">${ICON('left')} Anterior</button>
       <span class="meta">${fmtDate(days[0])} — ${fmtDate(days[6])}</span>
-      <button class="btn ghost small" onclick="habitOffset++;render()" ${habitOffset > 0 ? 'disabled' : ''}>Siguiente ▶</button>
+      <button class="btn ghost small" onclick="habitOffset++;render()" ${habitOffset > 0 ? 'disabled' : ''}>Siguiente ${ICON('right')}</button>
     </div>
     <div class="cal" style="max-width:300px;margin-bottom:8px">
       ${labels.map(l => `<div class="cal-day empty" style="visibility:visible">${l}</div>`).join('')}
@@ -535,7 +664,8 @@ function viewHabits() {
 window.addHabit = async function () {
   const name = $('#h-name').value.trim();
   if (!name) return;
-  await addItem('habits', { name, emoji: $('#h-emoji').value.trim() || '', targetPerWeek: +$('#h-target').value, log: {} });
+  const icon = HABIT_ICONS.includes($('#h-emoji').value) ? $('#h-emoji').value : 'habits';
+  await addItem('habits', { name, emoji: icon, targetPerWeek: +$('#h-target').value, log: {} });
 };
 
 // ---------- Salud ----------
@@ -556,17 +686,17 @@ var viewHealth = function () {
   const appts = D.appointments.filter(a => !a.done).sort((a, b) => (a.date + (a.time || '')).localeCompare(b.date + (b.time || '')));
   const routine = D.routine || {};
   return `
-    <h2>🩺 Salud</h2>
+    <h2>${ICON('health')} Salud</h2>
     <div class="stats-grid">
       <div class="stat-card"><div class="num">${w ? w + ' kg' : '—'}</div><div class="lbl">Último peso</div></div>
       <div class="stat-card"><div class="num">${todayW != null ? todayW + ' kg' : '—'}</div><div class="lbl">Peso hoy</div></div>
     </div>
 
-    <h3>🏋️ Rutina de ejercicios</h3>
+    <h3>${ICON('body')} Rutina de ejercicios</h3>
     <p class="meta">Planifica tu semana: elige muscle groups y ejercicios para cada día. Marca lo que completes.</p>
     <div class="row aiRoutineWrap">
-      <button class="btn" onclick="genRoutine()">🤖 Rutina semanal con IA</button>
-      <button class="btn ghost" onclick="progressRoutine()">📈 Ajustar progresión con IA</button>
+      <button class="btn" onclick="genRoutine()">${ICON('ai-robot')} Rutina semanal con IA</button>
+      <button class="btn ghost" onclick="progressRoutine()">${ICON('ai')} Ajustar progresión con IA</button>
     </div>
     <p class="meta">La primera genera la semana desde cero según tu perfil (reemplaza la actual). La segunda revisa lo que completaste y sube la intensidad donde toca.</p>
     <div id="aiOutRoutine" class="ai-out" hidden></div>
@@ -587,7 +717,7 @@ var viewHealth = function () {
               <input type="checkbox" ${ex.done ? 'checked' : ''} onchange="toggleEx(${i},${j},this.checked)">
               <span class="ex-name">${esc(ex.name)}</span>
               <span class="meta">${esc(ex.sets || '')}</span>
-              <button class="icon-btn" onclick="delEx(${i},${j})">×</button>
+              <button class="icon-btn" onclick="delEx(${i},${j})" aria-label="Eliminar ejercicio">${ICON('trash')}</button>
             </div>`).join('') : '<p class="meta">Sin ejercicios.</p>'}
           <div class="new-step">
             <input type="text" placeholder="+ ejercicio (ej: Sentadillas 4x10)" onkeydown="if(event.key==='Enter')addEx(${i},this)">
@@ -614,7 +744,7 @@ var viewHealth = function () {
         <input type="checkbox" onchange="patch('appointments','${a.id}',{done:true})">
         <span class="title">${esc(a.title)}</span>
         <span class="meta">${fmtDate(a.date)}${a.time ? ' ' + a.time : ''}</span>
-        <button class="icon-btn" onclick="del('appointments','${a.id}')">🗑</button>
+        <button class="icon-btn" onclick="del('appointments','${a.id}')" aria-label="Eliminar cita">${ICON('trash')}</button>
       </div></div>`).join('') || '<p class="meta">Sin citas pendientes.</p>'}
     <h3>Historial de peso</h3>
     ${D.measurements.length ? `<table><tr><th>Fecha</th><th>Peso</th></tr>
@@ -630,7 +760,7 @@ function viewSmoking() {
   const s = D.smoking || {};
   if (!s.answered) {
     return `<div class="card smoke-card">
-      <strong>🚬 ¿Fumás?</strong>
+      <strong>${ICON('health')} ¿Fumás?</strong>
       <p class="meta">Marcá lo que consumís. Si lo registrás por día, aparece en tus estadísticas de salud. Podés cambiarlo cuando quieras.</p>
       <div class="row" style="gap:16px;flex-wrap:wrap;margin:8px 0">
         <label><input type="checkbox" id="sm-tob" ${s.tobacco ? 'checked' : ''}> Tabaco</label>
@@ -641,7 +771,7 @@ function viewSmoking() {
     </div>`;
   }
   if (!s.tobacco && !s.cannabis) {
-    return `<div class="card smoke-card row" style="justify-content:space-between"><span class="meta">🚬 No fumás (según tu respuesta).</span><button class="btn ghost small" onclick="editSmoking()">Cambiar</button></div>`;
+    return `<div class="card smoke-card row" style="justify-content:space-between"><span class="meta">${ICON('health')} No fumás (según tu respuesta).</span><button class="btn ghost small" onclick="editSmoking()">Cambiar</button></div>`;
   }
   const log = s.log || {};
   const t = today();
@@ -650,7 +780,7 @@ function viewSmoking() {
   const cur = log[t] || {};
   return `<div class="card smoke-card">
     <div class="row" style="justify-content:space-between;flex-wrap:wrap;gap:8px">
-      <strong>🚬 Consumo</strong>
+      <strong>${ICON('health')} Consumo</strong>
       <button class="btn ghost small" onclick="editSmoking()">Cambiar</button>
     </div>
     <div class="stats-grid">
@@ -718,7 +848,7 @@ async function requestRoutine(kind, loadingMsg) {
     const res = await fetchJSON('/api/ai/advise', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ kind }) });
     if (res.applied) {
       out.className = 'ai-out';
-      out.innerHTML = esToHtml(res.reply || '✅ Rutina aplicada');
+      out.innerHTML = esToHtml(res.reply || `${ICON('check')} Rutina aplicada`);
       await reload({ silent: true });
       render();
     } else {
@@ -730,7 +860,7 @@ async function requestRoutine(kind, loadingMsg) {
     out.innerHTML = `<span style="color:var(--danger)">${esc(e.message || 'Error de red')}</span>`;
   }
 }
-window.genRoutine = function () { requestRoutine('workout', '🤖 Diseñando tu rutina semanal según tu perfil...'); };
+window.genRoutine = function () { requestRoutine('workout', `${ICON('ai-robot')} Diseñando tu rutina semanal según tu perfil...`); };
 window.progressRoutine = async function () {
   const r = D.routine || {};
   const hasDone = Object.keys(r).some(k => !k.endsWith('_focus') && (r[k] || []).some(e => e.done));
@@ -741,7 +871,7 @@ window.progressRoutine = async function () {
   if (!confirm(hasDone
     ? 'La IA revisará lo que completaste esta semana y ajustará la intensidad. Esto REEMPLAZA la rutina actual (los checks se reinician). ¿Continuar?'
     : 'No marcaste ningún ejercicio como completado esta semana: la IA podría no subir la intensidad. ¿Continuar de todos modos?')) return;
-  requestRoutine('progress', '📈 Analizando tu semana y ajustando la progresión...');
+  requestRoutine('progress', `${ICON('ai')} Analizando tu semana y ajustando la progresión...`);
 };
 window.saveMeasurement = async function () {
   const dateVal = $('#m-date').value || today();
@@ -795,10 +925,10 @@ function viewMeals() {
   const b = bmr();
   const calTarget = p.goalWeight && p.weightKg ? (p.goalWeight < p.weightKg ? Math.round((b || 2000) - 500) : (b || 2000)) : null;
   return `
-    <h2>🍎 Alimentación</h2>
+    <h2>${ICON('fruit')} Alimentación</h2>
 
     <div class="card profile-card">
-      <h3 style="margin-top:0">👤 Tu perfil</h3>
+      <h3 style="margin-top:0">${ICON('profile')} Tu perfil</h3>
       <div class="profile-grid">
         <label>Altura (cm)<input type="number" id="pf-height" value="${p.heightCm || ''}" placeholder="175"></label>
         <label>Peso (kg)<input type="number" id="pf-weight" value="${p.weightKg || ''}" placeholder="80"></label>
@@ -819,16 +949,16 @@ function viewMeals() {
       </div>
       <div class="row" style="margin-top:10px">
         <button class="btn" onclick="saveProfile()">Guardar perfil</button>
-        <button class="btn ghost" onclick="askAi('diet')">🍽️ Cambios de dieta recomendados por IA</button>
-        <button class="btn ghost" onclick="askAi('plan')">📆 Plan de dieta semanal con IA</button>
+        <button class="btn ghost" onclick="askAi('diet')">${ICON('meals')} Cambios de dieta recomendados por IA</button>
+        <button class="btn ghost" onclick="askAi('plan')">${ICON('calendar')} Plan de dieta semanal con IA</button>
       </div>
       <div id="aiOut" class="ai-out" hidden></div>
     </div>
 
     <div class="meal-nav">
-      <button class="btn ghost small" onclick="shiftMeal(-1)">◀</button>
+      <button class="btn ghost small" onclick="shiftMeal(-1)" aria-label="Día anterior">${ICON('left')}</button>
       <strong>${fmtDate(key)}${key === today() ? ' (hoy)' : ''}</strong>
-      <button class="btn ghost small" onclick="shiftMeal(1)">▶</button>
+      <button class="btn ghost small" onclick="shiftMeal(1)" aria-label="Día siguiente">${ICON('right')}</button>
       <input type="date" id="m-date2" value="${key}" onchange="mealDate=this.value;render()">
     </div>
     <div class="meal-grid">
@@ -843,18 +973,18 @@ function viewMeals() {
       <button class="btn" onclick="saveMeals()">Guardar comidas del día</button>
     </div>
     <div class="water-row">
-      <span>💧 Agua (${water}/8 vasos):</span>
+      <span>${ICON('water')} Agua (${water}/8 vasos):</span>
       ${Array.from({ length: 8 }, (_, i) => `<button class="wg ${i < water ? 'filled' : ''}" onclick="setWater(${i + 1})"></button>`).join('')}
       <button class="btn ghost small" onclick="setWater(0)">Reiniciar</button>
     </div>
     <div class="card nutri-card">
       <div class="row" style="justify-content:space-between;flex-wrap:wrap;gap:8px">
-        <strong>⚡ Calorías estimadas</strong>
+        <strong>${ICON('lightning')} Calorías estimadas</strong>
         <button class="btn ghost small" onclick="askCalories()">Estimar con IA</button>
       </div>
-      ${m.nutri ? `<div class="meta" style="margin:6px 0">≈<strong>${m.nutri.totalKcal} kcal</strong>${calTarget ? ` · objetivo ≈${calTarget} kcal (${m.nutri.totalKcal <= calTarget ? 'dentro ✓' : 'por encima ⚠️'})` : ''}</div>
-      <ul class="hist-list">${(m.nutri.items || []).map(it => `<li><span>🍽 ${esc(it.plato || '')}</span> ${it.gramos ?? '?'} g · ${it.kcal ?? '?'} kcal</li>`).join('')}</ul>
-      ${m.nutri.tip ? `<p class="meta">💡 ${esc(m.nutri.tip)}</p>` : ''}` : '<p class="meta">La IA estima kcal y peso de lo que registraste este día.</p>'}
+      ${m.nutri ? `<div class="meta" style="margin:6px 0">≈<strong>${m.nutri.totalKcal} kcal</strong>${calTarget ? ` · objetivo ≈${calTarget} kcal (${m.nutri.totalKcal <= calTarget ? `dentro ${ICON('check')}` : `por encima ${ICON('alert')}`})` : ''}</div>
+      <ul class="hist-list">${(m.nutri.items || []).map(it => `<li><span>${ICON('meals')} ${esc(it.plato || '')}</span> ${it.gramos ?? '?'} g · ${it.kcal ?? '?'} kcal</li>`).join('')}</ul>
+      ${m.nutri.tip ? `<p class="meta">${ICON('sparkle')} ${esc(m.nutri.tip)}</p>` : ''}` : '<p class="meta">La IA estima kcal y peso de lo que registraste este día.</p>'}
       <div id="nutriOut" class="ai-out" hidden></div>
     </div>
   `;
@@ -864,11 +994,11 @@ window.askCalories = async function () {
   if (!out) return;
   out.hidden = false;
   out.className = 'ai-out loading';
-  out.textContent = '⚡ Estimando calorías y porciones... (puede tardar 1-3 min)';
+  out.innerHTML = `${ICON('lightning')} Estimando calorías y porciones... (puede tardar 1-3 min)`;
   try {
     const res = await fetchJSON('/api/ai/advise', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ kind: 'calories', date: mealDate }) });
     out.className = 'ai-out';
-    if (res.applied) { out.innerHTML = esc(res.reply || '✓ Guardado'); await reload({ silent: true }); render(); }
+    if (res.applied) { out.innerHTML = res.reply ? esc(res.reply) : `${ICON('check')} Guardado`; await reload({ silent: true }); render(); }
     else out.innerHTML = `<span style="color:var(--danger)">${esc(res.error || 'No se pudo estimar')}</span>`;
   } catch (e) {
     out.className = 'ai-out';
@@ -892,7 +1022,7 @@ window.askAi = async function (kind) {
   const out = $('#aiOut');
   out.hidden = false;
   out.className = 'ai-out loading';
-  out.textContent = '🤔 Pidiendo recomendación a la IA...';
+  out.innerHTML = `${ICON('ai')} Pidiendo recomendación a la IA...`;
   try {
     const res = await fetchJSON('/api/ai/advise', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ kind }) });
     out.className = 'ai-out';
@@ -937,7 +1067,7 @@ window.askStrategy = async function () {
   if (!out) return;
   out.hidden = false;
   out.className = 'ai-out loading';
-  out.textContent = '🧭 Analizando tu semana para decidir prioridades... (puede tardar 1-3 min)';
+  out.innerHTML = `${ICON('compass')} Analizando tu semana para decidir prioridades... (puede tardar 1-3 min)`;
   try {
     const res = await fetchJSON('/api/ai/advise', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ kind: 'strategy' }) });
     out.className = 'ai-out';
@@ -966,14 +1096,14 @@ function viewCommitments() {
     return `<div class="card${overdue ? ' overdue' : ''}"><div class="row">
       <input type="checkbox" onchange="patch('commitments','${c.id}',{done:true})">
       <span class="title">${esc(c.title)}</span>
-      <span class="meta">${c.person ? '👤 ' + esc(c.person) : ''}${c.date ? ' · 📅 ' + fmtDate(c.date) + (overdue ? ' ⚠️ vencido' : c.date === t ? ' ⏰ hoy' : '') : ''}</span>
+      <span class="meta">${c.person ? ICON('profile') + ' ' + esc(c.person) : ''}${c.date ? ' · ' + ICON('calendar') + ' ' + fmtDate(c.date) + (overdue ? ' ' + ICON('alert') + ' vencido' : c.date === t ? ' ' + ICON('clock') + ' hoy' : '') : ''}</span>
       <button class="btn ghost small" title="Posponer 1 día" onclick="postponeCommit('${c.id}',1)">+1d</button>
       <button class="btn ghost small" title="Posponer 7 días" onclick="postponeCommit('${c.id}',7)">+7d</button>
-      <button class="icon-btn" onclick="del('commitments','${c.id}')">🗑</button>
+      <button class="icon-btn" onclick="del('commitments','${c.id}')" aria-label="Eliminar compromiso">${ICON('trash')}</button>
     </div></div>`;
   };
   return `
-    <h2>🤝 Compromisos</h2>
+    <h2>${ICON('commitment')} Compromisos</h2>
     <p class="meta">Promesas a otras personas. Lo vencido avisa, lo cumplido suma por persona (+20 XP).</p>
     <div class="inline-add" style="margin-top:12px">
       <input type="text" id="c-title" placeholder="¿A qué te comprometiste?" onkeydown="if(event.key==='Enter')addCommit()">
@@ -987,13 +1117,13 @@ function viewCommitments() {
     </div>` : ''}
     ${shown.map(card).join('') || '<p class="meta">Sin compromisos pendientes.</p>'}
     ${Object.keys(score).length ? `<h3>Cumplimiento por persona</h3>
-      <ul class="hist-list">${Object.entries(score).sort().map(([p, s]) => `<li><span>👤 ${esc(p)}</span> ${s.done} cumplidos${s.total ? ` · ${s.total} pendientes` : ' · al día ✓'}</li>`).join('')}</ul>` : ''}
+      <ul class="hist-list">${Object.entries(score).sort().map(([p, s]) => `<li><span>${ICON('profile')} ${esc(p)}</span> ${s.done} cumplidos${s.total ? ` · ${s.total} pendientes` : ` · al día ${ICON('check')}`}</li>`).join('')}</ul>` : ''}
     ${D.commitments.filter(c => c.done).length ? `<h3>Cumplidos</h3>
       ${D.commitments.filter(c => c.done).map(c => `
         <div class="card done"><div class="row">
           <input type="checkbox" checked onchange="patch('commitments','${c.id}',{done:false})">
           <span class="title">${esc(c.title)}</span>
-          <button class="icon-btn" onclick="del('commitments','${c.id}')">🗑</button>
+          <button class="icon-btn" onclick="del('commitments','${c.id}')" aria-label="Eliminar compromiso">${ICON('trash')}</button>
         </div></div>`).join('')}` : ''}
   `;
 }
@@ -1023,7 +1153,7 @@ function viewFinances() {
   const catMax = catEntries[0]?.[1] || 1;
   const limits = f.limits || {};
   return `
-    <h2>💸 Finanzas</h2>
+    <h2>${ICON('finances')} Finanzas</h2>
     <div class="finance-summary">
       <div class="stat-card"><div class="num">${f.monthlyBudget ? Math.max(0, f.monthlyBudget - monthSpent).toLocaleString() : '—'}</div><div class="lbl">Restante este mes</div></div>
       <div class="stat-card"><div class="num">${monthSpent.toLocaleString()}</div><div class="lbl">Gastado este mes</div></div>
@@ -1042,11 +1172,11 @@ function viewFinances() {
       const near = !over && lim != null && lim > 0 && v >= lim * 0.8;
       return `<div class="catbar-row"><span class="catbar-name">${esc(c)}</span>
         <div class="catbar-track"><div class="catbar-fill${over ? ' over' : ''}" style="width:${Math.max(3, Math.round(v / catMax * 100))}%"></div></div>
-        <span class="catbar-amt">$${v.toLocaleString()}${over ? ' ⚠️' : near ? ' 👀' : ''}</span></div>`;
+        <span class="catbar-amt">$${v.toLocaleString()}${over ? ' ' + ICON('alert') : near ? ' ' + ICON('mood') : ''}</span></div>`;
     }).join('')}</div>
     <h3>Límites por categoría</h3>
     <div class="limits-grid">${CATEGORIES.map(c => `<label>${esc(c)}<input type="number" min="0" placeholder="Sin límite" value="${limits[c] ?? ''}" onchange="setCatLimit('${c}',this.value)"></label>`).join('')}</div>
-    <p class="meta">⚠️ = límite superado · 👀 = cerca del límite (80%).</p>` : '<p class="meta">Sin gastos este mes: el gráfico aparece solo.</p>'}
+    <p class="meta">${ICON('alert')} = límite superado · ${ICON('mood')} = cerca del límite (80%).</p>` : '<p class="meta">Sin gastos este mes: el gráfico aparece solo.</p>'}
     ${viewWishlist()}
     <h3>Añadir gasto</h3>
     <div class="inline-add">
@@ -1060,7 +1190,7 @@ function viewFinances() {
     <table><tr><th>Fecha</th><th>Categoría</th><th>Descripción</th><th class="amt">Importe</th><th></th></tr>
     ${monthExpenses.sort((a, b) => b.date.localeCompare(a.date)).map(e => `
       <tr><td>${fmtDate(e.date)}</td><td><span class="cat-chip">${esc(e.category)}</span></td><td>${esc(e.description)}</td><td class="amt">${e.amount.toLocaleString()}</td>
-      <td><button class="icon-btn" onclick="delExpense('${e.id}')">🗑</button></td></tr>`).join('')}
+      <td><button class="icon-btn" onclick="delExpense('${e.id}')" aria-label="Eliminar gasto">${ICON('trash')}</button></td></tr>`).join('')}
     </table>` : '<p class="meta">Sin gastos registrados este mes.</p>'}
   `;
 }
@@ -1098,7 +1228,7 @@ function viewWishlist() {
   const pending = items.filter(w => !w.bought);
   const total = pending.reduce((s, w) => s + (+w.price || 0), 0);
   return `
-    <h3>🛍️ Lista de deseos</h3>
+    <h3>${ICON('star')} Lista de deseos</h3>
     <div class="inline-add">
       <input type="text" id="w-title" placeholder="Qué querés comprar" style="flex:1" onkeydown="if(event.key==='Enter')addWish()">
       <input type="number" id="w-price" placeholder="Precio est." style="width:120px">
@@ -1113,7 +1243,7 @@ function viewWishlist() {
           <span class="title" style="${w.bought ? 'text-decoration:line-through;opacity:.6' : ''}">${esc(w.title)}</span>
           <span class="priority ${esc(w.priority)}">${esc(w.priority)}</span>
           <span class="meta">${w.price ? '$' + (+w.price).toLocaleString() : 'sin precio'}</span>
-          <button class="icon-btn" onclick="del('wishlist','${w.id}')" aria-label="Eliminar deseo">🗑</button>
+          <button class="icon-btn" onclick="del('wishlist','${w.id}')" aria-label="Eliminar deseo">${ICON('trash')}</button>
         </div>
       </div>`).join('') || '<p class="meta">Sin deseos guardados. Anotá lo que querés comprar para decidir con calma.</p>'}
   `;
@@ -1144,11 +1274,11 @@ function viewShopping() {
         <input type="checkbox" ${i.done ? 'checked' : ''} onchange="patch('shopping','${i.id}',{done:this.checked})" aria-label="Marcar como en el carrito">
         <span class="title" style="${i.done ? 'text-decoration:line-through;opacity:.6' : ''}">${esc(i.name)}</span>
         ${i.qty ? `<span class="meta">× ${esc(i.qty)}</span>` : ''}
-        <button class="icon-btn" onclick="del('shopping','${i.id}')" aria-label="Eliminar">🗑</button>
+        <button class="icon-btn" onclick="del('shopping','${i.id}')" aria-label="Eliminar">${ICON('trash')}</button>
       </div>
     </div>`;
   return `
-    <h2>🛒 Lista de supermercado</h2>
+    <h2>${ICON('cart-clean')} Lista de supermercado</h2>
     <div class="inline-add">
       <input type="text" id="s-name" placeholder="Ej: leche" style="flex:1" onkeydown="if(event.key==='Enter')addShopItem()">
       <input type="text" id="s-qty" placeholder="Cant. (ej: 2 kg)" style="width:140px" onkeydown="if(event.key==='Enter')addShopItem()">
@@ -1157,7 +1287,7 @@ function viewShopping() {
     <h3>Por comprar (${pending.length})</h3>
     ${pending.map(row).join('') || '<p class="meta">Nada pendiente. Agregá lo que te falta.</p>'}
     ${done.length ? `<h3>En el carrito (${done.length})</h3>${done.map(row).join('')}
-      <button class="btn ghost small" style="margin-top:8px" onclick="clearBoughtShopping()">🧹 Quitar los marcados</button>` : ''}
+      <button class="btn ghost small" style="margin-top:8px" onclick="clearBoughtShopping()">${ICON('trash')} Quitar los marcados</button>` : ''}
   `;
 }
 window.addShopItem = async function () {
@@ -1178,11 +1308,11 @@ function viewLearning() {
   const items = D.learning;
   const pomoSel = pomo.itemId || (items[0] && items[0].id);
   return `
-    <h2>📚 Aprendizaje</h2>
+    <h2>${ICON('learning')} Aprendizaje</h2>
     <p class="meta">Cursos, libros, idiomas, hobbies — con progreso medido en sesiones reales.</p>
     <div class="card pomo-card">
       <div class="row" style="justify-content:space-between;flex-wrap:wrap;gap:8px">
-        <strong>⏱ Pomodoro (25/5)</strong>
+        <strong>${ICON('pomodoro')} Pomodoro (25/5)</strong>
         ${items.length ? `<select id="pomo-item" ${pomo.running ? 'disabled' : ''}>${items.map(l => `<option value="${l.id}" ${l.id === pomoSel ? 'selected' : ''}>${esc(l.title)}</option>`).join('')}</select>` : '<span class="meta">Añade un tema abajo para usar el temporizador.</span>'}
       </div>
       <div class="pomo-mid">
@@ -1193,7 +1323,7 @@ function viewLearning() {
         </div>
       </div>
       <div class="row" style="gap:6px;margin-top:8px;flex-wrap:wrap">
-        <button class="btn" onclick="pomoToggle()" ${items.length ? '' : 'disabled'}>${pomo.running ? '⏸ Pausar' : '▶ Empezar'}</button>
+        <button class="btn" onclick="pomoToggle()" ${items.length ? '' : 'disabled'}>${ICON(pomo.running ? 'pause' : 'play')} ${pomo.running ? 'Pausar' : 'Empezar'}</button>
         <button class="btn ghost" onclick="pomoReset()">Reiniciar</button>
         ${pomo.running ? '<span class="meta">Corre aunque cambies de pestaña.</span>' : '<span class="meta">Completar 25 min registra la sesión (+10 XP).</span>'}
       </div>
@@ -1208,8 +1338,8 @@ function viewLearning() {
       <div class="card">
         <div class="row">
           <span class="title">${esc(l.title)}</span>
-          <span class="meta">${esc(l.type)}${l.goal !== 'ninguna' ? ' · 🎯 ' + l.goal : ''}</span>
-          <button class="icon-btn" onclick="del('learning','${l.id}')">🗑</button>
+          <span class="meta">${esc(l.type)}${l.goal !== 'ninguna' ? ' · ' + ICON('target') + ' ' + l.goal : ''}</span>
+          <button class="icon-btn" onclick="del('learning','${l.id}')" aria-label="Eliminar aprendizaje">${ICON('trash')}</button>
         </div>
         <div class="progress-bar"><div style="width:${l.progress || 0}%"></div></div>
         <div class="row" style="margin-top:6px">
@@ -1219,12 +1349,12 @@ function viewLearning() {
           <span class="meta" style="min-width:40px">${l.progress || 0}%</span>
           ${l.notes ? `<span class="meta">${esc(l.notes)}</span>` : ''}
         </div>
-        <div class="meta" style="margin-top:6px">⏱ ${(l.sessions || []).length}/${l.targetSessions || 8} sesiones · ${(l.sessions || []).reduce((s, x) => s + (x.minutes || 0), 0)} min</div>
+        <div class="meta" style="margin-top:6px">${ICON('clock')} ${(l.sessions || []).length}/${l.targetSessions || 8} sesiones · ${(l.sessions || []).reduce((s, x) => s + (x.minutes || 0), 0)} min</div>
         <div class="row" style="margin-top:6px;gap:8px;flex-wrap:wrap">
           <label class="meta">Meta <input type="number" min="1" style="width:60px" value="${l.targetSessions || 8}" onchange="setLearnTarget('${l.id}',this.value)"> sesiones</label>
           <button class="btn ghost small" onclick="autoProgress('${l.id}')">≈ fijar avance por sesiones</button>
         </div>
-        ${(l.sessions || []).length ? `<ul class="hist-list">${l.sessions.slice(-5).reverse().map(s => `<li><span>⏱ ${s.minutes} min</span> ${fmtDate(s.date)}</li>`).join('')}</ul>` : ''}
+        ${(l.sessions || []).length ? `<ul class="hist-list">${l.sessions.slice(-5).reverse().map(s => `<li><span>${ICON('clock')} ${s.minutes} min</span> ${fmtDate(s.date)}</li>`).join('')}</ul>` : ''}
       </div>`).join('') || '<p class="meta">Añade tu primer curso o libro arriba.</p>'}
   `;
 }
@@ -1262,6 +1392,7 @@ window.pomoToggle = function () {
   }
   const sel = $('#pomo-item'); if (sel) pomo.itemId = sel.value;
   if (pomo.secs <= 0) pomo.secs = POMO_LEN[pomo.mode];
+  pomo.plannedMinutes = Math.max(1, Math.round(pomo.secs / 60));
   pomo.endAt = Date.now() + pomo.secs * 1000;
   pomo.running = true;
   clearInterval(pomo.timer);
@@ -1283,7 +1414,7 @@ async function pomoFinish() {
     const selVal = $('#pomo-item') ? $('#pomo-item').value : null;
     const l = D.learning.find(x => x.id === (selVal || pomo.itemId));
     if (l) {
-      l.sessions = [...(l.sessions || []), { date: today(), minutes: 25 }];
+      l.sessions = [...(l.sessions || []), { date: today(), minutes: pomo.plannedMinutes || 25 }];
       await putData({ learning: D.learning }, { silent: true });
     }
     pomo.mode = 'brk'; pomo.secs = POMO_LEN.brk;
@@ -1302,7 +1433,7 @@ window.addLearn = async function () {
 function viewProjects() {
   const items = D.projects;
   return `
-    <h2>🚀 Proyectos</h2>
+    <h2>${ICON('rocket')} Proyectos</h2>
     <p class="meta">Cosas importantes con varios pasos — incluye esas actividades procrastinadas.</p>
     <div class="inline-add" style="margin-top:12px">
       <input type="text" id="p-title" placeholder="Nombre del proyecto" onkeydown="if(event.key==='Enter')addProject()">
@@ -1318,7 +1449,7 @@ function viewProjects() {
           <span class="title">${esc(p.title)}</span>
           <span class="cat-chip">${esc(p.status)}</span>
           <span class="meta">${doneN}/${steps.length} pasos</span>
-          <button class="icon-btn" onclick="del('projects','${p.id}')">🗑</button>
+          <button class="icon-btn" onclick="del('projects','${p.id}')" aria-label="Eliminar proyecto">${ICON('trash')}</button>
         </div>
         ${p.description ? `<div class="meta" style="margin:6px 0">${esc(p.description)}</div>` : ''}
         <ul class="checklist">
@@ -1364,19 +1495,26 @@ window.addStep = async function (input, pid) {
 // ---------- Noticias ----------
 let newsQ = '', newsRes = null, newsLoading = false, feedRes = null, feedLoading = false, feedOpen = null;
 let digest = null, digestLoading = false, digestErr = '';
-const NEWS_BTN_LABEL = '📰 Noticias';
+const NEWS_BTN_LABEL = 'Noticias';
+// Valores históricos de insignias; se traducen a iconos SVG y no se muestran como emoji.
+const LEGACY_EMOJI_BADGES = ['⭐', '🔥', '🏆', '🌟', '⚡', '🥉', '🥈', '🥇', '🎯', '🚀', '🧠', '💪', '🌱', '✅'];
+function badgeIcon(value, unlocked) {
+  if (!unlocked) return ICON('lock');
+  const index = LEGACY_EMOJI_BADGES.indexOf(value);
+  return ICON(index < 0 ? 'medal' : ['star','habits','trophy','sparkle','lightning','medal','medal','medal','target','rocket','brain','body','fruit','check'][index]);
+}
 function digestCount() { return (digest?.topics || []).reduce((n, g) => n + g.items.length, 0); }
 // Aviso de titulares: la app lo pide al abrirse y también lo notifica (1 vez por día)
 function updateNewsBadge() {
   const nbs = $$('#tabsTrack [data-tab="news"]');
-  nbs.forEach(nb => { nb.textContent = NEWS_BTN_LABEL + (digestCount() ? ` · ${digestCount()}` : ''); });
+  nbs.forEach(nb => { const label = nb.querySelector('span'); if (label) label.textContent = NEWS_BTN_LABEL + (digestCount() ? ` · ${digestCount()}` : ''); });
 }
 function notifyDigest() {
   if (!notifOn() || !digest?.topics?.length) return;
   try { if (localStorage.getItem('pout-digest-day') === digest.date) return; } catch (_) { return; }
   const lines = digest.topics.slice(0, 4).map(g => `• ${g.topic}: ${g.items[0].title}`);
   try {
-    new Notification(`📰 Titulares de hoy · ${digestCount()} sobre tus temas`, { body: lines.join('\n') });
+    new Notification(`Titulares de hoy · ${digestCount()} sobre tus temas`, { body: lines.join('\n') });
     localStorage.setItem('pout-digest-day', digest.date);
   } catch (_) {}
 }
@@ -1393,24 +1531,24 @@ window.digestBrief = async function () {
   const out = $('#digestBriefOut');
   const items = (digest?.topics || []).flatMap(g => g.items.map(x => ({ title: x.title, source: x.outlet || x.src }))).slice(0, 20);
   if (!out || !items.length) return;
-  out.hidden = false; out.className = 'ai-out loading'; out.textContent = '🧠 Resumiendo tus titulares... (1-3 min)';
+  out.hidden = false; out.className = 'ai-out loading'; out.innerHTML = `${ICON('ai')} Resumiendo tus titulares... (1-3 min)`;
   try {
     const r = await fetchJSON('/api/ai/advise', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ kind: 'newsbrief', items }) });
     out.className = 'ai-out'; out.innerHTML = r.reply ? esToHtml(r.reply) : esc(r.error || 'Sin respuesta.');
   } catch (e) { out.className = 'ai-out'; out.textContent = 'Error: ' + errMsg(e); }
 };
 function digestHtml() {
-  if (digestLoading && !digest) return '<strong>☀️ Titulares de hoy</strong><p class="meta">Buscando novedades de tus temas...</p>';
-  if (digestErr) return `<strong>☀️ Titulares de hoy</strong><p class="meta">⚠️ ${esc(digestErr)}</p>`;
-  if (!digest) return '<strong>☀️ Titulares de hoy</strong><p class="meta">Se preparan al abrir la app.</p>';
-  if (!digest.topics?.length) return '<strong>☀️ Titulares de hoy</strong><p class="meta">Hoy no encontré titulares para tus temas. Probá buscar manualmente abajo.</p>';
+  if (digestLoading && !digest) return `<strong>${ICON('sun')} Titulares de hoy</strong><p class="meta">Buscando novedades de tus temas...</p>`;
+  if (digestErr) return `<strong>${ICON('sun')} Titulares de hoy</strong><p class="meta">${ICON('alert')} ${esc(digestErr)}</p>`;
+  if (!digest) return `<strong>${ICON('sun')} Titulares de hoy</strong><p class="meta">Se preparan al abrir la app.</p>`;
+  if (!digest.topics?.length) return `<strong>${ICON('sun')} Titulares de hoy</strong><p class="meta">Hoy no encontré titulares para tus temas. Probá buscar manualmente abajo.</p>`;
   return `
     <div class="row" style="justify-content:space-between;flex-wrap:wrap;gap:8px">
-      <strong>☀️ Titulares de hoy (${digestCount()})</strong>
+      <strong>${ICON('sun')} Titulares de hoy (${digestCount()})</strong>
       <span class="row" style="gap:6px">
         ${digest.cached ? '<span class="meta">ya generado hoy</span>' : '<span class="meta">recién generado</span>'}
-        <button class="btn ghost small" onclick="refreshDigest()" ${digestLoading ? 'disabled' : ''}>🔄 Actualizar</button>
-        <button class="btn ghost small" onclick="digestBrief()">🧠 Resumen con IA</button>
+        <button class="btn ghost small" onclick="refreshDigest()" ${digestLoading ? 'disabled' : ''}>${ICON('refresh')} Actualizar</button>
+        <button class="btn ghost small" onclick="digestBrief()">${ICON('ai')} Resumen con IA</button>
       </span>
     </div>
     ${digest.fallback ? '<p class="meta">Aún sin temas propios: sumá intereses abajo (o un aprendizaje / proyecto) y el resumen se personaliza.</p>' : ''}
@@ -1419,7 +1557,7 @@ function digestHtml() {
         <div class="meta" style="font-weight:700">${esc(g.topic)}</div>
         ${g.items.map(n => `<a class="digest-item" href="${esc(safeHref(n.url))}" target="_blank" rel="noopener">
           <span class="news-title">${esc(n.title)}</span>
-          <span class="meta">${esc(n.outlet || n.src)}${n.date ? ' · 📅 ' + esc(n.date) : ''}</span>
+          <span class="meta">${esc(n.outlet || n.src)}${n.date ? ' · ' + ICON('calendar') + ' ' + esc(n.date) : ''}</span>
         </a>`).join('')}
       </div>`).join('')}
     <div id="digestBriefOut" class="ai-out" hidden></div>
@@ -1433,30 +1571,30 @@ function viewNews() {
   const { auto, interests, feeds } = newsTopics();
   const chips = [...interests, ...auto.filter(a => !interests.includes(a))];
   return `
-    <h2>📰 Centro de noticias</h2>
+    <h2>${ICON('newspaper')} Centro de noticias</h2>
     <p class="meta">Solo noticias en español, sobre lo que estás aprendiendo y construyendo. Fuentes gratuitas sin cuenta: Google Noticias, Bing Noticias y Wikipedia.</p>
     <div class="card due-panel">${digestHtml()}</div>
     <div class="card">
       <div class="row" style="justify-content:space-between;flex-wrap:wrap;gap:8px">
-        <strong>🔎 Buscar</strong>
+        <strong>${ICON('search')} Buscar</strong>
         ${newsRes ? `<span class="meta">actualizado ${esc(newsRes.updatedAt?.slice(0, 16).replace('T', ' ') || '')}${newsRes.cached ? ' · caché' : ''}</span>` : ''}
       </div>
       <div class="inline-add" style="margin-top:8px">
         <input type="text" id="n-q" placeholder="Ej: python, guitarra, running..." value="${esc(newsQ)}" onkeydown="if(event.key==='Enter')searchNews()">
         <button class="btn" onclick="searchNews()" ${newsLoading ? 'disabled' : ''}>${newsLoading ? 'Buscando...' : 'Buscar'}</button>
-        ${newsRes?.items?.length ? '<button class="btn ghost" onclick="newsBrief()">🧠 Resumen con IA</button>' : ''}
+        ${newsRes?.items?.length ? `<button class="btn ghost" onclick="newsBrief()">${ICON('ai')} Resumen con IA</button>` : ''}
       </div>
       ${chips.length ? `<div class="chips-row">${chips.map(c => `<button class="chip ${c === newsQ ? 'on' : ''}" onclick="searchNewsTopic(decodeURIComponent('${encodeURIComponent(c).replace(/'/g, '%27')}'))">${esc(c)}</button>`).join('')}</div>`
         : '<p class="meta">Añade aprendizajes, proyectos o intereses abajo y aparecerán aquí como temas.</p>'}
       <div id="briefOut" class="ai-out" hidden></div>
       <div id="newsOut" style="margin-top:8px">
-        ${newsLoading ? '<p class="meta">🔎 Buscando en español en Google Noticias, Bing Noticias y Wikipedia...</p>' : ''}
-        ${newsRes?.error ? `<p class="meta">⚠️ ${esc(newsRes.error)}</p>` : ''}
+        ${newsLoading ? `<p class="meta">${ICON('search')} Buscando en español en Google Noticias, Bing Noticias y Wikipedia...</p>` : ''}
+        ${newsRes?.error ? `<p class="meta">${ICON('alert')} ${esc(newsRes.error)}</p>` : ''}
         ${newsRes && !newsRes.error ? newsCards(newsRes.items) : (newsLoading || newsQ ? '' : '<p class="meta">Toca un tema o busca algo para ver novedades.</p>')}
       </div>
     </div>
     <div class="card">
-      <strong>⭐ Mis intereses</strong>
+      <strong>${ICON('star')} Mis intereses</strong>
       <div class="inline-add" style="margin-top:8px">
         <input type="text" id="n-interest" placeholder="Ej: ciclismo, IA, cocina..." onkeydown="if(event.key==='Enter')addInterest()">
         <button class="btn" onclick="addInterest()">Añadir</button>
@@ -1464,7 +1602,7 @@ function viewNews() {
       ${(interests.length ? `<div class="chips-row">${interests.map(i => `<span class="chip on">${esc(i)} <button class="icon-btn" onclick="delInterest(decodeURIComponent('${encodeURIComponent(i).replace(/'/g, '%27')}'))" title="Quitar">×</button></span>`).join('')}</div>` : '<p class="meta">Sin intereses todavía.</p>')}
     </div>
     <div class="card">
-      <strong>📡 Feeds RSS que sigo</strong>
+      <strong>${ICON('news')} Feeds RSS que sigo</strong>
       <p class="meta">Añade el RSS de cualquier blog o medio en español sobre tus hobbies y léelo sin salir de la app. Estos feeds se muestran tal cual los publique el medio, en su idioma original.</p>
       <div class="inline-add" style="margin-top:8px">
         <input type="text" id="n-feed-name" placeholder="Nombre" style="max-width:160px">
@@ -1473,13 +1611,13 @@ function viewNews() {
       </div>
       ${feeds.length ? feeds.map(f => `
         <div class="row" style="justify-content:space-between;margin-top:6px">
-          <span>📡 <strong>${esc(f.name)}</strong> <span class="meta">${esc(f.url.slice(0, 50))}${f.url.length > 50 ? '…' : ''}</span></span>
+          <span>${ICON('rss')} <strong>${esc(f.name)}</strong> <span class="meta">${esc(f.url.slice(0, 50))}${f.url.length > 50 ? '…' : ''}</span></span>
           <span class="row" style="gap:6px">
             <button class="btn ghost small" onclick="readFeed('${f.id}')">Leer</button>
-            <button class="icon-btn" onclick="delFeed('${f.id}')">🗑</button>
+            <button class="icon-btn" onclick="delFeed('${f.id}')" aria-label="Dejar de seguir feed">${ICON('trash')}</button>
           </span>
         </div>
-        ${feedOpen === f.id ? `<div style="margin-top:6px">${feedLoading ? '<p class="meta">Leyendo feed...</p>' : (feedRes?.error ? `<p class="meta">⚠️ ${esc(feedRes.error)}</p>` : (feedRes ? newsCards(feedRes.items) : ''))}</div>` : ''}
+        ${feedOpen === f.id ? `<div style="margin-top:6px">${feedLoading ? '<p class="meta">Leyendo feed...</p>' : (feedRes?.error ? `<p class="meta">${ICON('alert')} ${esc(feedRes.error)}</p>` : (feedRes ? newsCards(feedRes.items) : ''))}</div>` : ''}
       `).join('') : '<p class="meta">No sigues ningún feed todavía.</p>'}
     </div>
   `;
@@ -1491,7 +1629,7 @@ function errMsg(e) {
   return raw;
 }
 function newsIcon(src) {
-  return src === 'Google Noticias' ? '🔎' : src === 'Bing Noticias' ? '🔵' : src === 'Wikipedia' ? '📖' : '📡';
+  return src === 'Google Noticias' || src === 'Bing Noticias' ? ICON('search') : src === 'Wikipedia' ? ICON('book') : ICON('rss');
 }
 function newsCards(items) {
   if (!items?.length) return '<p class="meta">Sin resultados en español para esa búsqueda. Prueba con una palabra más general (ej: guitarra, running, cocina, python).</p>';
@@ -1503,7 +1641,7 @@ function newsCards(items) {
       <a class="news-card" href="${esc(safeHref(n.url))}" target="_blank" rel="noopener">
         <div class="news-title">${esc(n.title)}</div>
         ${n.snippet ? `<div class="meta">${esc(n.snippet)}</div>` : ''}
-        ${(n.outlet || n.date) ? `<div class="meta">${esc(n.outlet || '')}${n.outlet && n.date ? ' · ' : ''}${n.date ? '📅 ' + esc(n.date) : ''}</div>` : ''}
+        ${(n.outlet || n.date) ? `<div class="meta">${esc(n.outlet || '')}${n.outlet && n.date ? ' · ' : ''}${n.date ? ICON('calendar') + ' ' + esc(n.date) : ''}</div>` : ''}
       </a>`).join('')}</div>
   `).join('');
 }
@@ -1519,7 +1657,7 @@ window.searchNews = async function () {
 window.newsBrief = async function () {
   const out = $('#briefOut');
   if (!out || !newsRes?.items?.length) return;
-  out.hidden = false; out.className = 'ai-out loading'; out.textContent = '🧠 Resumiendo titulares... (1-3 min)';
+  out.hidden = false; out.className = 'ai-out loading'; out.innerHTML = `${ICON('ai')} Resumiendo titulares... (1-3 min)`;
   try {
     const res = await fetchJSON('/api/ai/advise', { method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ kind: 'newsbrief', items: newsRes.items.slice(0, 20).map(x => ({ title: x.title, source: x.outlet || x.src })) }) });
@@ -1567,7 +1705,7 @@ window.readFeed = async function (id) {
 // ---------- Logros ----------
 function viewRewards() {
   setTimeout(loadRewards, 0);
-  return `<h2>🏆 Logros</h2><div id="rewardsBox"><p class="meta">Cargando tus logros...</p></div>`;
+  return `    <h2>${ICON('trophy')} Logros</h2><div id="rewardsBox"><p class="meta">Cargando tus logros...</p></div>`;
 }
 window.loadRewards = async function () {
   const box = $('#rewardsBox');
@@ -1581,8 +1719,8 @@ window.loadRewards = async function () {
         <div class="lvl-circle">Nv ${r.hero.level}</div>
         <div class="hero-info">
           <strong>${esc(r.hero.name)}</strong>
-          <div class="meta">${r.hero.totalXp} XP totales · 🔥 racha ${r.hero.streak} día${r.hero.streak === 1 ? '' : 's'}</div>
-          <div class="meta">${r.hero.freeze?.available ? '❄️ Streak Freeze disponible: te perdona 1 día en blanco esta semana' : '❄️ Streak Freeze usado esta semana'}</div>
+          <div class="meta">${r.hero.totalXp} XP totales · ${ICON('habits')} racha ${r.hero.streak} día${r.hero.streak === 1 ? '' : 's'}</div>
+          <div class="meta">${ICON('freeze')} ${r.hero.freeze?.available ? 'Streak Freeze disponible: te perdona 1 día en blanco esta semana' : 'Streak Freeze usado esta semana'}</div>
           <div class="progress-bar"><div style="width:${pct}%"></div></div>
           <div class="meta">${r.hero.xpInLevel}/${r.hero.xpToNext} XP para el nivel ${r.hero.level + 1}</div>
         </div>
@@ -1590,19 +1728,33 @@ window.loadRewards = async function () {
       <h3>Insignias (${unlocked.length}/${r.badges.length})</h3>
       <div class="badges-grid">
         ${r.badges.map(b => `<div class="badge ${b.at ? '' : 'locked'}" title="${esc(b.desc)}${b.at ? ' · ' + fmtDate(b.at) : ''}">
-          <div class="bem">${b.at ? b.emoji : '🔒'}</div>
+          <div class="bem">${badgeIcon(b.emoji, !!b.at)}</div>
           <div class="bname">${esc(b.name)}</div>
           <div class="meta">${esc(b.desc)}</div>
         </div>`).join('')}
       </div>
       <h3>Actividad reciente</h3>
-      ${r.history.length ? `<ul class="hist-list">${r.history.map(h => `<li><span>⭐ +${h.xp}</span> ${esc(h.title || h.action)} <span class="meta">${fmtDate(h.date)}</span></li>`).join('')}</ul>` : '<p class="meta">Completa tareas, ejercicios o hábitos para ganar XP.</p>'}
+      ${r.history.length ? `<ul class="hist-list">${r.history.map(h => `<li><span>${ICON('star')} +${h.xp}</span> ${esc(h.title || h.action)} <span class="meta">${fmtDate(h.date)}</span></li>`).join('')}</ul>` : '<p class="meta">Completa tareas, ejercicios o hábitos para ganar XP.</p>'}
     `;
   } catch (e) { box.innerHTML = '<p class="meta">No se pudieron cargar los logros.</p>'; }
 };
 
 // ---------- Eventos globales ----------
 function bind() {
+  // selector visual de iconos SVG para nuevos hábitos
+  $$('.habit-icon-choice').forEach(button => {
+    button.onclick = () => {
+      const selected = button.dataset.habitIcon;
+      const input = $('#h-emoji');
+      if (!HABIT_ICONS.includes(selected) || !input) return;
+      input.value = selected;
+      $$('.habit-icon-choice').forEach(option => {
+        const active = option === button;
+        option.classList.toggle('selected', active);
+        option.setAttribute('aria-pressed', String(active));
+      });
+    };
+  });
   // clicks en días del calendario de hábitos
   $$('.cal-day[data-habit]').forEach(el => {
     el.onclick = async () => {
@@ -1618,7 +1770,13 @@ document.addEventListener('DOMContentLoaded', async () => {
   // Tema
   const syncThemeIcon = () => {
     const btn = $('#themeToggle');
-    if (btn) btn.textContent = document.body.classList.contains('dark') ? '☀️' : '🌙';
+    if (!btn) return;
+    const dark = document.body.classList.contains('dark');
+    const icon = dark ? 'sun' : 'moon';
+    const label = dark ? 'Cambiar al modo claro' : 'Cambiar al modo oscuro';
+    btn.title = label;
+    btn.setAttribute('aria-label', label);
+    btn.innerHTML = ICON(icon);
   };
   $('#themeToggle').onclick = () => {
     document.body.classList.toggle('dark');
@@ -1633,10 +1791,12 @@ document.addEventListener('DOMContentLoaded', async () => {
   $('#exportBtn').onclick = () => { location.href = '/api/export'; };
   // Bloqueo con PIN
   $('#lockBtn').onclick = async () => { await fetch('/api/auth/logout', { method: 'POST' }); location.href = '/login.html'; };
-  $('#pinBtn').onclick = () => { location.href = '/login.html'; };
+  $('#pinBtn').onclick = () => { location.href = '/login.html?change-pin=1'; };
   // El splash de marca se retira cuando la app ya pintó (aunque falle la carga, no se queda pegado)
   try { await reload(); }
   finally { if (typeof window.poutSplashDone === 'function') window.poutSplashDone(); }
+  // Cambios hechos por Jarvis (u otro cliente) llegan por SSE, sin recargar la página.
+  connectAgentEvents();
   // Titulares del día: se piden al abrir la app (y se notifican una vez por día)
   updateNewsBadge();
   window.loadDigest();

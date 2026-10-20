@@ -1,0 +1,114 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>PWA probe</title>
+<style>
+  html,body{margin:0;font-family:system-ui}
+  fieldset{border:1px solid #333;padding:10px 12px;margin:8px 0}
+  label{display:block;margin:4px 0 2px}
+  code{background:#0d251c;padding:1px 4px;border-radius:3px;color:#7fca7f}
+  .ok{color:#7fca7f} .bad{color:#ff7a7a}
+</style>
+</head>
+<body>
+<h1>PWA probe — marca v3 vs v2</h1>
+<p>Este archivo es público; sin sesión.</p>
+
+<fieldset>
+  <legend>Cache storage (si PWA está instalado/activado)</legend>
+  <pre id="cs">n/a</pre>
+</fieldset>
+
+<fieldset>
+  <legend>Service worker</legend>
+  <label>state <code id="sw-state"></code></label>
+  <label>script URL <code id="sw-url"></code></label>
+  <label>controlled <code id="sw-ctrl"></code></label>
+</fieldset>
+
+<fieldset>
+  <legend>Imágenes de marca — HEAD (v3) vs repo (v2)</legend>
+  <label>splash-real <code id="sh"></code></label>
+  <label>mark-real <code id="mh"></code></label>
+  <label>label-real <code id="lh"></code></label>
+  <label>splash-bg <code id="sbh"></code></label>
+  <label>icon-192 <code id="ih"></code></label>
+  <p>¿vemos v3 o v2? <code id="verdict"></code></p>
+</fieldset>
+
+<script>
+(async () => {
+  const cs = document.getElementById('cs');
+  try {
+    const keys = await caches.keys();
+    cs.textContent = keys.length ? keys.map(k=>'  '+k).join('\n') : 'sin caches abiertos';
+  } catch(e){ cs.textContent = e && e.message ? e.message : String(e); }
+
+  const swState = document.getElementById('sw-state');
+  const swUrl = document.getElementById('sw-url');
+  const swCtrl = document.getElementById('sw-ctrl');
+  try {
+    const id = await navigator.serviceWorker.getRegistration();
+    swState.textContent = id ? id.active ? 'active' : id.installing ? 'installing' : id.waiting ? 'waiting' : 'registered' : 'sin SW registrado';
+    swUrl.textContent = id ? id.active ? id.active.scriptURL : '(sin active)' : '—';
+    swCtrl.textContent = id && id.active ? (await id.active.hasController() ? 'sí' : 'no') : '—';
+  } catch(e){ swState.textContent='error'; swUrl.textContent=swCtrl.textContent=e&&e.message?e.message:String(e); }
+
+  const names = ['splash-real','mark-real','label-real','splash-bg','icon-192'];
+  const ids = { 'splash-real':'sh','mark-real':'mh','label-real':'lh','splash-bg':'sbh','icon-192':'ih' };
+  const headHashes = {
+    'splash-real':'c173a31b40d283506b4b47e3d856a3ec',
+    'mark-real':'8f94ed6f250dd4a31acde3e189bc44c0',
+    'label-real':'c175d063e31d8a11d321c79a1e5cff80',
+    'splash-bg':'18ee9a44c1dcc22d86eeebd2dee06470',
+    'icon-192':'2920b1148fdec5b09705b34b3a61eedb'
+  };
+  const repoHashes = {
+    'splash-real':'58b75bf998e2a4813345f9db2fe20075',
+    'mark-real':'0e93eb95dd743b34e8f5bc65b2a42109',
+    'label-real':'5f3ce61fd0fa26b5c3cdf0a7f75fa0f1',
+    'splash-bg':'e4d6a33ef9d1bca1e1d34f63d68eb3b2',
+    'icon-192':'2920b1148fdec5b09705b34b3a61eedb'
+  };
+  const tag = { 'splash-real':'splash-real.png?v=3', 'mark-real':'mark-real.png?v=3', 'label-real':'label-real.png?v=3', 'splash-bg':'splash-bg.png?v=3', 'icon-192':'icon-192.png?v=3' };
+  const canvas = document.createElement('canvas');
+  function imgHash(src){
+    return new Promise((res,rej)=>{
+      const i=document.createElement('img'); i.crossOrigin='anonymous';
+      i.onload=()=>{
+        canvas.width=i.naturalWidth; canvas.height=i.naturalHeight;
+        const ctx=canvas.getContext('2d'); ctx.drawImage(i,0,0);
+        const d=ctx.getImageData(0,0,canvas.width,canvas.height).data;
+        let h=0; for(let j=0;j<d.length;j+=4){ h=(h*31+d[j]+(d[j+1]<<4)+(d[j+2]<<8))>>>0; }
+        res(String(h));
+      };
+      i.onerror=rej; i.src=src;
+    });
+  }
+  const result=[];
+  for(const name of names){
+    await (async ()=>{
+      const src=tag[name];
+      try {
+        const h=await imgHash(src);
+        const v = (h===headHashes[name]) ? 'HEAD-v3' : (h===repoHashes[name]) ? 'repo-v2' : 'desconocido('+h+')';
+        result.push(''+name+' => '+v);
+        document.getElementById(ids[name]).textContent = v;
+      } catch(e){
+        result.push(name+' => error');
+        document.getElementById(ids[name]).textContent = e&&e.message?e.message:String(e);
+      }
+    })();
+  }
+  const anyV3 = result.some(r=>r.includes('HEAD-v3'));
+  const anyUnknown = result.some(r=>r.includes('desconocido'));
+  const verdict = document.getElementById('verdict');
+  if (anyV3 && !anyUnknown) verdict.textContent = 'v3 (HEAD)';
+  else if (anyUnknown) verdict.textContent = 'mezclado/inconsistente';
+  else if (result.every(r=>r.includes('repo-v2'))) verdict.textContent = 'todas v2 (repo)';
+  else verdict.textContent = 'revisar';
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>Splash de PC — definición y centering</title>
+<style>
+  html,body{margin:0;background:#0D251C}
+  .stage{position:relative;width:100vw;height:100vh;overflow:hidden}
+  /* HTML original de index.html — sin editar */
+  #poutSplash { position: fixed; inset: 0; z-index: 9999; overflow: hidden; background: #0D251C url('splash-bg.png?v=3') center/100% 100% no-repeat; }
+  #poutSplash .art { position: absolute; inset: 0; animation: poutSplashIn .9s cubic-bezier(.22,.9,.28,1) both; }
+  #poutSplash .mk { position: absolute; left: 53.8%; top: 41.4%; width: 69.8%; height: auto; transform: translate(-50%, -50%); }
+  #poutSplash .lb { position: absolute; left: 49.8%; top: 59.7%; width: 83%; height: auto; transform: translate(-50%, -50%); }
+  #poutSplash.off { opacity: 0; transition: opacity .35s ease; pointer-events: none; }
+  @keyframes poutSplashIn { from { opacity: 0; transform: scale(.86); } to { opacity: 1; transform: none; } }
+  @media (prefers-reduced-motion: reduce) { #poutSplash .art { animation: none; } }
+</style>
+</head>
+<body>
+  <div class="stage" id="stage">
+    <div id="poutSplash" aria-hidden="true">
+      <div class="art">
+        <img class="mk" src="mark-real.png?v=3" alt="" width="1080" height="804" fetchpriority="high" decoding="async">
+        <img class="lb" src="label-real.png?v=3" alt="" width="1200" height="102" fetchpriority="high" decoding="async">
+      </div>
+    </div>
+  </div>
+  <pre id="info"></pre>
+  <script>
+    (function(){
+      const s = document.getElementById('poutSplash');
+      const mk = s.querySelector('.mk');
+      const lb = s.querySelector('.lb');
+      function sizes(img, cls){
+        return img.naturalWidth + 'x' + img.naturalHeight + ' => CSS rendered '
+          + Math.round(img.getBoundingClientRect().width) + 'x' + Math.round(img.getBoundingClientRect().height)
+          + ' @ top=' + img.getBoundingClientRect().top.toFixed(1) + ' left=' + img.getBoundingClientRect().left.toFixed(1);
+      }
+      function rects(){
+        const r = s.getBoundingClientRect();
+        return 'splash rect: ' + Math.round(r.width) + 'x' + Math.round(r.height) + ' @ ' + r.top.toFixed(1)+','+r.left.toFixed(1);
+      }
+      function report(){
+        const reg = 'viewport: ' + Math.round(self.innerWidth) + 'x' + Math.round(self.innerHeight);
+        const xml = document.getElementById('stage').getBoundingClientRect();
+        const stage = 'stage: ' + Math.round(xml.width) + 'x' + Math.round(xml.height) + ' @ ' + xml.top.toFixed(1)+','+xml.left.toFixed(1);
+        const splash = rects();
+        const mark = sizes(mk,'mk');
+        const label = sizes(lb,'lb');
+        document.getElementById('info').textContent =
+          reg + '\n' + stage + '\n' + splash + '\n' + mark + '\n' + label;
+      }
+      window.addEventListener('load', report);
+      window.addEventListener('resize', report);
+      report();
+    })();
+  </script>
+</body>
+</html>

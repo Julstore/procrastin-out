@@ -10,7 +10,8 @@
   "scripts": {
     "start": "electron .",
     "server": "node server.js",
-    "test": "node --test tests/feed-safety.test.js tests/ai-budget.test.js tests/ai-server.test.js",
+    "test": "node --test tests/feed-safety.test.js tests/ai-budget.test.js tests/ai-server.test.js tests/ai-broadcast.test.js tests/cache-guard.test.js tests/agent-contract.test.js tests/voice-bridge.test.js",
+    "voice": "node scripts/jarvis-voice-bridge.js",
     "cloud": "node server.js",
     "migrate": "node scripts/push-to-cloud.mjs",
     "dist": "electron-builder --win nsis"

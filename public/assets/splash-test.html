@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="es">
+<head><meta charset="UTF-8"><title>prueba splash PC</title>
+<style>
+  body { margin:0; background:#0D251C; color:#eee; font:12px ui-monospace,monospace; }
+  #wrap { position:relative; width:100vw; height:100vh; background:#0D251C url('../splash-bg.png?v=3') center/100% 100% no-repeat; overflow:hidden; }
+  #art { position:absolute; inset:0; }
+  #art .mk { position:absolute; left:53.8%; top:41.4%; width:69.8%; height:auto; transform:translate(-50%,-50%); }
+  #art .lb { position:absolute; left:49.8%; top:59.7%; width:83%; height:auto; transform:translate(-50%,-50%); }
+  .cm { position:absolute; background:#4CC587; width:10px; height:10px; border-radius:50%; transform:translate(-50%,-50%); pointer-events:none; }
+  .cl { position:absolute; background:#E67E22; width:10px; height:10px; border-radius:50%; transform:translate(-50%,-50%); pointer-events:none; }
+  .cv { position:absolute; background:#9b9b9b; width:10px; height:10px; border-radius:50%; transform:translate(-50%,-50%); pointer-events:none; }
+  .guide-h { position:absolute; left:0; right:0; border-top:1px dashed rgba(255,255,255,.3); }
+  .guide-v { position:absolute; top:0; bottom:0; border-left:1px dashed rgba(255,255,255,.3); }
+  .info { position:absolute; left:8px; bottom:8px; color:#fff; background:#000a; padding:6px 8px; border-radius:6px; font-size:11px; }
+  .legend { position:absolute; top:8px; left:8px; color:#fff; background:#000a; padding:6px 8px; border-radius:6px; font-size:11px; }
+  .legend b { color:#4CC587; }
+  .legend span.l2 { display:block; }
+  .legend .l3 { color:#E67E22; }
+  .legend .l4 { color:#9b9b9b; }
+</style>
+</head>
+<body>
+<div class="legend">
+  <b>leyenda</b>
+  <span class="l2" style="color:#4CC587">— centro marca (green)</span>
+  <span class="l2 l3" style="color:#E67E22">— centro rotulo (orange)</span>
+  <span class="l2 l4" style="color:#9b9b9b">— centro viewport (gray)</span>
+</div>
+<div id="wrap">
+  <div id="art">
+    <img class="mk" src="../mark-real.png?v=3" alt="" width="1080" height="804">
+    <img class="lb" src="../label-real.png?v=3" alt="" width="1200" height="102">
+  </div>
+</div>
+<div class="info" id="info"></div>
+<script>
+const W = window.innerWidth, H = window.innerHeight;
+const mk = document.querySelector('#art .mk'); const lb = document.querySelector('#art .lb');
+function mkDot(name, el, color){
+  const c = document.createElement('div'); c.className = 'cm';
+  c.style.background = color;
+  if(el){ const r = el.getBoundingClientRect(); c.style.left = (r.left + r.width/2)+'px'; c.style.top = (r.top + r.height/2)+'px'; }
+  c.title = name;
+  return c;
+}
+const vcx = W/2, vcy = H/2;
+const mcA = mk ? { x: mk.getBoundingClientRect().left + mk.getBoundingClientRect().width/2, y: mk.getBoundingClientRect().top + mk.getBoundingClientRect().height/2 } : null;
+const lbA = lb ? { x: lb.getBoundingClientRect().left + lb.getBoundingClientRect().width/2, y: lb.getBoundingClientRect().top + lb.getBoundingClientRect().height/2 } : null;
+mkDot('marca','#4CC587').style.left = (mcA ? mcA.x : vcx)+'px'; document.body.appendChild(mkDot('marca','#4CC587'));
+lbDot = mkDot('rotulo','#E67E22'); if(lbA) lbDot.style.left = lbA.x+'px', lbDot.style.top = lbA.y+'px'; else lbDot.style.left = vcx+'px', lbDot.style.top = vcy+'px';
+document.body.appendChild(lbDot);
+const vDot = document.createElement('div'); vDot.className='cv'; vDot.style.left = vcx+'px'; vDot.style.top = vcy+'px'; vDot.title='centro viewport'; document.body.appendChild(vDot);
+document.getElementById('wrap').appendChild(document.createElement('div')).className='guide-h'; document.querySelector('.guide-h').style.top = vcy+'px';
+document.getElementById('wrap').appendChild(document.createElement('div')).className='guide-v'; document.querySelector('.guide-v').style.left = vcx+'px';
+const i = document.getElementById('info');
+i.innerHTML = (mk ? 'marca ' + mcA.x.toFixed(0) + ',' + mcA.y.toFixed(0) + ' vs viewport ' + vcx.toFixed(0) + ',' + vcy.toFixed(0) + ' (offset '+(mcA.x-vcx).toFixed(0)+','+(mcA.y-vcy).toFixed(0)+')<br>' : 'marca sin cargar<br>') +
+  (lb ? 'rotulo ' + lbA.x.toFixed(0) + ',' + lbA.y.toFixed(0) + ' vs viewport ' + vcx.toFixed(0) + ',' + vcy.toFixed(0) + ' (offset '+(lbA.x-vcx).toFixed(0)+','+(lbA.y-vcy).toFixed(0)+')<br>' : 'rotulo sin cargar<br>') +
+  'viewport ' + W + 'x' + H + '<br>frac mk ' + mk.style.left + ' ' + mk.style.top + ' frac lb ' + lb.style.left + ' ' + lb.style.top;
+</script>
+</body>
+</html>

@@ -361,6 +361,54 @@ test('el cliente SSE recibe el cambio hecho por el agente', async () => {
   controller.abort();
 });
 
+test('el PUT humano hecho por el agente avisa a la UI con origin agent', async () => {
+  const controller = new AbortController();
+  const sse = await fetch(base + '/api/agent/events', {
+    headers: { Accept: 'text/event-stream', ...auth() },
+    signal: controller.signal,
+  });
+  assert.equal(sse.status, 200);
+  const reader = sse.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = '';
+  const readUntil = async (needle, ms = 5000) => {
+    const deadline = Date.now() + ms;
+    while (Date.now() < deadline) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      if (buffer.includes(needle)) return true;
+    }
+    return false;
+  };
+  assert.ok(await readUntil('event: hello'));
+
+  // El canal humano que necesita el PIN (p. ej. citas con hora): el agente
+  // entra con su sesión de PIN y manda el PUT con el Bearer de agente encima.
+  const login = await fetch(base + '/api/auth/login', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ pin: '1234' }),
+  });
+  assert.equal(login.status, 200);
+  const setCookie = login.headers.get('set-cookie') || '';
+  const session = (setCookie.match(/pout_sess=([a-f0-9]{64})/) || [])[1];
+  assert.ok(session, 'la app debería devolver la cookie de sesión');
+  const put = await fetch(base + '/api/data', {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + TOKEN, Cookie: 'pout_sess=' + session },
+    body: JSON.stringify({ appointments: [{ id: 'cita-put-test', title: 'Dentista', date: '2026-01-10' }] }),
+  });
+  assert.equal(put.status, 200);
+
+  assert.ok(await readUntil('event: state'), 'debería emitir state tras el PUT');
+  const at = buffer.lastIndexOf('event: state');
+  const frame = buffer.slice(at);
+  const payload = JSON.parse(frame.slice(frame.indexOf('data: ') + 6, frame.indexOf('\n', frame.indexOf('data: '))));
+  assert.equal(payload.origin, 'agent', 'la UI abierta se tiene que refrescar: quien escribió fue Jarvis, no la página');
+  controller.abort();
+});
+
 test('la sesión humana también puede escuchar los eventos (para la UI)', async () => {
   const r = await fetch(base + '/api/agent/events', {
     headers: { Accept: 'text/event-stream', Cookie: cookie },

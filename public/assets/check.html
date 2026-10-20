@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html lang="es">
+<head><meta charset="UTF-8"><title>check splash real PC</title>
+<style>body{margin:0;background:#0D251C;color:#eee;font:12px ui-monospace,monospace}pre{margin:6px 8px 12px;color:#8fd}canvas{display:block;margin:0 6px 4px;border-radius:6px}</style>
+</head>
+<body>
+<div id="wrap"><div id="art"><img class="mk" src="../mark-real.png?v=3" alt="" width="1080" height="804"><img class="lb" src="../label-real.png?v=3" alt="" width="1200" height="102"></div></div>
+<pre id="out"></pre>
+<script>
+(function(){
+  const W = window.innerWidth, H = window.innerHeight;
+  const mk = document.querySelector('#art .mk'); const lb = document.querySelector('#art .lb'); const wrap = document.querySelector('#wrap');
+  function info(name, el){ if(!el) return { name, none:true }; const r = el.getBoundingClientRect(); const c = { x: Math.round(r.left + r.width/2), y: Math.round(r.top + r.height/2) }; const off = { x: c.x - Math.round(W/2), y: c.y - Math.round(H/2) }; return { name, w: Math.round(r.width), h: Math.round(r.height), center: c, off, nat: el.naturalWidth+'x'+el.naturalHeight }; }
+  const mkInfo = info('mk', mk);
+  const lbInfo = info('lb', lb);
+  const out = document.getElementById('out');
+  out.innerHTML = '<mark>PC check</mark> W=' + W + ' H=' + H + ' (' + Math.round(W/2) + ',' + Math.round(H/2) + ')<br>' +
+    'mk existe: ' + mkInfo.none + '<br>' +
+    (mkInfo.none ? '' : 'mk natural ' + mkInfo.nat + ' mostrado ' + mkInfo.w + 'x' + mkInfo.h + ' centro (' + mkInfo.center.x + ',' + mkInfo.center.y + ') offset (' + mkInfo.off.x + ',' + mkInfo.off.y + ')') + '<br>' +
+    'lb existe: ' + lbInfo.none + '<br>' +
+    (lbInfo.none ? '' : 'lb natural ' + lbInfo.nat + ' mostrado ' + lbInfo.w + 'x' + lbInfo.h + ' centro (' + lbInfo.center.x + ',' + lbInfo.center.y + ') offset (' + lbInfo.off.x + ',' + lbInfo.off.y + ')') + '<br>' +
+    'wrap existe: ' + (!!wrap) + '<br>' +
+    '#poutSplash estilo ' + (document.getElementById('poutSplash') ? 'existe' : 'no existe') + '<br>' +
+    'frac actual: mk left ' + (mk ? mk.style.left : 'n/a') + ' top ' + (mk ? mk.style.top : 'n/a') + '<br>' +
+    'frac actual: lb left ' + (lb ? lb.style.left : 'n/a') + ' top ' + (lb ? lb.style.top : 'n/a') + '<br>' +
+    'transform: ' + (mk ? mk.style.transform : 'n/a');
+})();
+</script>
+</body>
+</html>

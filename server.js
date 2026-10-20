@@ -824,6 +824,9 @@ function applyWeeklyPlan(parsed) {
   }
   data.routine = routine;
   save();
+  // La rutina se aplica desde el endpoint de IA (no pasar por PUT ni comando):
+  // si no emitimos, la pestaña Salud no muestra la semana hasta recargar.
+  broadcast('state', { origin: 'ui', tab: 'health' });
   return { applied: true };
 }
 // Resumen de la semana actual de entrenamiento: completados vs pendientes por día
@@ -1224,7 +1227,11 @@ const server = http.createServer(async (req, res) => {
       let game = null;
       try { game = handleDataPut(before, body); } catch (e) { console.error('rewards:', e.message); }
       save();
-      broadcast('state', { origin: 'ui' });
+      // El navegador nunca manda el Bearer de agente: si llega, quien escribió
+      // fue Jarvis por el canal humano (lo que el catálogo aún no cubre). Avisa
+      // con `origin: 'agent'` para que la página abierta haga reload en vivo —
+      // con `origin: 'ui'` la página se lo salta por no pisarse a sí misma.
+      broadcast('state', { origin: tokenOk ? 'agent' : 'ui' });
       return respond(res, 200, { ok: true, game });
     }
     if (pathname === '/api/rewards' && req.method === 'GET') {
@@ -1440,6 +1447,9 @@ const server = http.createServer(async (req, res) => {
         data.meals = data.meals || {};
         data.meals[day] = { ...(data.meals[day] || {}), nutri: { items: parsed.items.slice(0, 12), totalKcal: Math.round(parsed.totalKcal), tip: String(parsed.tip || '').slice(0, 200), at: new Date().toISOString() } };
         save();
+        // El nutri llega por otro camino (no PUT ni comando): si no emitimos,
+        // la tarjeta de calorías no aparece hasta recargar la app.
+        broadcast('state', { origin: 'ui', tab: 'meals' });
         return respond(res, 200, { ok: true, applied: true, reply: `⚡ Estimación guardada: ≈${Math.round(parsed.totalKcal)} kcal.` });
       }
       if (kind === 'newsbrief') {

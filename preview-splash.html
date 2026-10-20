@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>procrastin-out · splash preview</title>
+<style>
+*{box-sizing:border-box}
+html,body{width:100%;height:100%;margin:0;overflow:hidden;background:#0d251c}
+#poutSplash{position:fixed;inset:0;overflow:hidden;background:#0d251c}
+#poutSplash::before,#poutSplash::after{content:"";position:absolute;pointer-events:none;border-radius:50%;filter:blur(56px);background:rgba(230,126,34,.18)}
+#poutSplash::before{width:min(42vw,520px);aspect-ratio:1;left:-14vw;top:-20vh}
+#poutSplash::after{width:min(44vw,560px);aspect-ratio:1;right:-16vw;bottom:-24vh}
+.art{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:clamp(8px,1.8vh,16px);padding:24px}
+.art::before{content:"";position:absolute;z-index:-1;width:min(72vw,700px);height:min(52vh,500px);border-radius:50%;background:rgba(230,126,34,.12);filter:blur(56px)}
+img{display:block;height:auto;max-width:100%;object-fit:contain;image-rendering:auto}
+.mk{width:min(54vw,34vh,430px);max-height:38vh}
+.lb{width:min(66vw,38vh,480px);max-height:12vh}
+@media(max-width:600px){.art{gap:clamp(8px,1.5vh,12px);padding:max(16px,env(safe-area-inset-top)) 20px max(16px,env(safe-area-inset-bottom))}.mk{width:min(72vw,32vh,340px);max-height:34vh}.lb{width:min(76vw,34vh,360px);max-height:10vh}#poutSplash::before,#poutSplash::after{filter:blur(40px)}}
+</style>
+</head>
+<body><div id="poutSplash"><main class="art"><img class="mk" src="public/mark-real.png?v=3" width="1080" height="804" alt=""><img class="lb" src="public/label-real.png?v=3" width="1200" height="102" alt=""></main></div></body>
+</html>
