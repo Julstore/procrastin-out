@@ -1986,3 +1986,4 @@ document.addEventListener('DOMContentLoaded', async () => {
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => navigator.serviceWorker.register('/sw.js', { updateViaCache: 'none' }).catch(() => {}));
 }
+/* deploy: items-slot 8dcb61f */
