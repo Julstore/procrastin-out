@@ -953,6 +953,72 @@ function showAiMsg(elId, resp) {
   box.textContent = resp?.reply || resp?.error || '';
   box.hidden = false;
 }
+// Fotos de comidas: caché por (día|franja) para no repetir GET en cada render
+const mealPhotoCache = {}; // `${date}|${f}` → dataUrl | null
+window.addMealItem = function (f) { $('#items-' + f).insertAdjacentHTML('beforeend', mealItemRow(f)); };
+function mealItemRow(field, it = {}) { // fila editable de un alimento con peso (g)
+  void field;
+  return `<div class="meal-item">
+    <input type="text" class="mi-n" placeholder="Alimento (ej: milanesa)" value="${esc(it.n || '')}">
+    <input type="number" class="mi-g" placeholder="0" min="0" step="5" style="width:84px;flex:none" value="${it.g != null && it.g !== '' ? it.g : ''}" aria-label="Peso en gramos"> <span class="meta">g</span>
+    <button class="icon-btn" onclick="this.parentNode.remove()" aria-label="Quitar alimento">${ICON('trash')}</button>
+  </div>`;
+}
+function setPhThumb(f, url) {
+  const el = $('#ph-prev-' + f); if (!el) return;
+  if (!url) { el.innerHTML = '<span class="meta">sin foto</span>'; return; }
+  el.innerHTML = `<div class="ph-wrap"><img src="${url}" alt="Foto ${f}" loading="lazy"><button class="icon-btn" title="Borrar foto" onclick="delMealPhoto('${f}')" aria-label="Borrar foto">×</button></div>`;
+}
+function hydrateMealPhotos() {
+  const fields = ['breakfast', 'lunch', 'dinner', 'snacks', 'supper', 'extra'];
+  for (const f of fields) {
+    const key = mealDate + '|' + f;
+    const el = $('#ph-prev-' + f);
+    if (!el || el.dataset.day === mealDate) continue;
+    el.dataset.day = mealDate;
+    const cached = mealPhotoCache[key];
+    if (cached !== undefined) { setPhThumb(f, cached); continue; }
+    el.innerHTML = '<span class="meta"></span>';
+    fetch(`/api/meals/photo?date=${mealDate}&field=${f}`)
+      .then(r => r.json()).then(p => { mealPhotoCache[key] = p.dataUrl || null; setPhThumb(f, mealPhotoCache[key]); })
+      .catch(() => setPhThumb(f, null));
+  }
+}
+async function compressImage(file) { // ≤1024px, JPEG ~0.72: la foto baja de peso antes de subir
+  const url = URL.createObjectURL(file);
+  try {
+    const img = await new Promise((ok, err) => { const i = new Image(); i.onload = () => ok(i); i.onerror = err; i.src = url; });
+    const scale = Math.min(1, 1024 / Math.max(img.width, img.height));
+    const c = document.createElement('canvas');
+    c.width = Math.max(1, Math.round(img.width * scale));
+    c.height = Math.max(1, Math.round(img.height * scale));
+    c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+    return c.toDataURL('image/jpeg', 0.72);
+  } finally { URL.revokeObjectURL(url); }
+}
+window.takeMealPhoto = function (f) { $('#ph-file-' + f)?.click(); };
+window.pickMealPhoto = async function (f, input) {
+  const file = input?.files?.[0];
+  if (!file) return;
+  const ph = $('#ph-prev-' + f);
+  if (ph) { ph.dataset.day = mealDate; ph.innerHTML = '<span class="meta">📷 subiendo…</span>'; }
+  try {
+    const dataUrl = await compressImage(file);
+    const r = await fetchJSON('/api/meals/photo', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ date: mealDate, field: f, image: dataUrl }) });
+    if (r && r.error) throw new Error(r.error);
+    mealPhotoCache[mealDate + '|' + f] = dataUrl;
+    setPhThumb(f, dataUrl);
+  } catch (e) {
+    setPhThumb(f, null);
+    alert(e.message || 'No se pudo subir la foto');
+  }
+  input.value = '';
+};
+window.delMealPhoto = async function (f) {
+  try { await fetch(`/api/meals/photo?date=${mealDate}&field=${f}`, { method: 'DELETE' }); } catch (_) { /* sin red: igual sacamos el thumb */ }
+  mealPhotoCache[mealDate + '|' + f] = null;
+  setPhThumb(f, null);
+};
 function viewMeals() {
   const key = mealDate;
   const m = D.meals[key] || {};
@@ -960,6 +1026,7 @@ function viewMeals() {
   const p = D.profile || {};
   const b = bmr();
   const calTarget = p.goalWeight && p.weightKg ? (p.goalWeight < p.weightKg ? Math.round((b || 2000) - 500) : (b || 2000)) : null;
+  setTimeout(hydrateMealPhotos, 0); // miniaturas cuando el HTML ya está en pantalla
   return `
     <h2>${ICON('fruit')} Alimentación</h2>
 
@@ -973,8 +1040,21 @@ function viewMeals() {
       ${['Desayuno', 'Almuerzo', 'Comida', 'Merienda', 'Cena', 'Snacks'].map((label, i) => {
         const fieldMap = ['breakfast', 'lunch', 'dinner', 'snacks', 'supper', 'extra'];
         const f = fieldMap[i];
+        const items = Array.isArray(m.items?.[f]) ? m.items[f] : [];
         return `<div class="card meal-field">
-          <label>${label}</label>
+          <div class="row" style="justify-content:space-between;margin-bottom:4px">
+            <label style="margin:0">${label}</label>
+            <div class="row" style="gap:6px">
+              <button class="btn ghost small" onclick="takeMealPhoto('${f}')" title="Foto de ${label.toLowerCase()}">📷 Foto</button>
+              <input type="file" accept="image/*" id="ph-file-${f}" hidden onchange="pickMealPhoto('${f}',this)">
+            </div>
+          </div>
+          <div id="ph-prev-${f}" class="meal-photo" data-day=""><span class="meta">sin foto</span></div>
+          <div class="meal-items" id="items-${f}">
+            ${items.map(it => mealItemRow(f, it)).join('')}
+          </div>
+          <button class="btn ghost small" style="margin-top:6px" onclick="addMealItem('${f}')">+ alimento con peso</button>
+          <label style="margin-top:8px">Registro libre</label>
           <textarea id="meal-${f}" placeholder="¿Qué comiste?">${esc(m[f] || '')}</textarea>
         </div>`;
       }).join('')}
@@ -1055,6 +1135,16 @@ window.saveMeals = async function () {
   ['#meal-breakfast', '#meal-lunch', '#meal-dinner', '#meal-snacks', '#meal-supper', '#meal-extra'].forEach((sel, i) => {
     m[['breakfast', 'lunch', 'dinner', 'snacks', 'supper', 'extra'][i]] = $(sel).value;
   });
+  // Alimentos con peso por franja: se leen de las filas de la UI
+  const fieldMap = ['breakfast', 'lunch', 'dinner', 'snacks', 'supper', 'extra'];
+  m.items = {};
+  for (const f of fieldMap) {
+    const rows = [...document.querySelectorAll(`#items-${f} .meal-item`)]
+      .map(row => ({ n: row.querySelector('.mi-n')?.value.trim() || '', g: parseFloat(row.querySelector('.mi-g')?.value) })).
+      filter(i => i.n || (Number.isFinite(i.g) && i.g > 0));
+    if (rows.length) m.items[f] = rows.map(i => ({ n: i.n, g: Number.isFinite(i.g) && i.g > 0 ? i.g : null }));
+  }
+  if (!Object.keys(m.items).length) delete m.items;
   D.meals = { ...D.meals, [mealDate]: m };
   await putData({ meals: D.meals });
 };

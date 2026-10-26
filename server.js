@@ -1098,6 +1098,33 @@ function respond(res, status, body, headers = {}) {
   res.end(payload);
 }
 
+// ===== Fotos de las comidas (Alimentación) =====
+// Una foto por franja (desayuno/almuerzo/...) por día. Viven fuera del documento
+// grande del usuario para no inflar cada guardado: en la nube tienen su propia
+// fila pout_kv por cuenta+día+franja; en archivo, data/photos/<cuenta>/<día>-<franja>.json
+const MEAL_PHOTO_FIELDS = new Set(['breakfast', 'lunch', 'dinner', 'snacks', 'supper', 'extra']);
+const MEAL_PHOTO_MAX_CHARS = 400_000; // dataURL: el navegador comprime antes de subir
+const MEAL_PHOTO_URL = /^data:image\/(jpeg|png|webp);base64,[A-Za-z0-9+/]+=*$/;
+const PHOTO_DIR = path.join(DATA_DIR, 'photos');
+function mealPhotoFile(userId, date, field) {
+  return path.join(PHOTO_DIR, SAFE_ID.test(userId || '') ? userId : 'x', `${date}-${SAFE_ID.test(field || '') ? field : 'x'}.json`);
+}
+async function readMealPhoto(userId, date, field) {
+  if (USE_DB) return kvStore ? await kvStore.get(`photo:${userId}:${date}:${field}`) : null;
+  try { return JSON.parse(fs.readFileSync(mealPhotoFile(userId, date, field), 'utf8')); } catch { return null; }
+}
+async function saveMealPhotoFile(userId, date, field, value) {
+  if (USE_DB) { if (kvStore) await kvStore.set(`photo:${userId}:${date}:${field}`, value); return; }
+  const f = mealPhotoFile(userId, date, field);
+  fs.mkdirSync(path.dirname(f), { recursive: true });
+  fs.writeFileSync(f, JSON.stringify(value));
+}
+async function deleteMealPhoto(userId, date, field) {
+  if (USE_DB) { if (kvStore) await kvStore.del(`photo:${userId}:${date}:${field}`); return; }
+  try { fs.unlinkSync(mealPhotoFile(userId, date, field)); } catch { /* ya no existía */ }
+}
+const VALID_DATE = /^\d{4}-\d{2}-\d{2}$/;
+
 async function getBody(req) {
   let chunks = [];
   let size = 0;
@@ -1325,6 +1352,30 @@ const server = http.createServer(async (req, res) => {
       broadcast('state', { origin: tokenOk ? 'agent' : 'ui' });
       return respond(res, 200, { ok: true, game });
     }
+    // Fotos de comidas: sube/ve/borra la foto de una franja del día (solo datos propios).
+    if (pathname === '/api/meals/photo') {
+      if (req.method === 'POST') {
+        const body = await getBody(req);
+        const date = body?.date, field = body?.field, image = typeof body?.image === 'string' ? body.image : '';
+        if (!VALID_DATE.test(date || '') || !MEAL_PHOTO_FIELDS.has(field)) return respond(res, 400, { error: 'Día o comida inválidos' });
+        if (!MEAL_PHOTO_URL.test(image) || image.length > MEAL_PHOTO_MAX_CHARS) return respond(res, 400, { error: 'La foto no es válida o pesa demasiado (máximo ~300 KB)' });
+        await saveMealPhotoFile(activeUserId, date, field, { dataUrl: image, at: new Date().toISOString() });
+        broadcast('state', { origin: 'ui', tab: 'meals' });
+        return respond(res, 200, { ok: true });
+      }
+      if (req.method === 'GET') {
+        const date = url.searchParams.get('date'), field = url.searchParams.get('field');
+        if (!VALID_DATE.test(date || '') || !MEAL_PHOTO_FIELDS.has(field || '')) return respond(res, 400, { error: 'Día o comida inválidos' });
+        const p = await readMealPhoto(activeUserId, date, field);
+        return respond(res, 200, p || { dataUrl: null });
+      }
+      if (req.method === 'DELETE') {
+        const date = url.searchParams.get('date'), field = url.searchParams.get('field');
+        if (!VALID_DATE.test(date || '') || !MEAL_PHOTO_FIELDS.has(field || '')) return respond(res, 400, { error: 'Día o comida inválidos' });
+        await deleteMealPhoto(activeUserId, date, field);
+        return respond(res, 200, { ok: true });
+      }
+    }
     if (pathname === '/api/rewards' && req.method === 'GET') {
       return respond(res, 200, rewardsSnapshot());
     }
@@ -1516,22 +1567,58 @@ const server = http.createServer(async (req, res) => {
         return respond(res, 200, { error: 'La IA no devolvió un plan válido' + (parseErr ? ' (JSON ilegible). Intenta de nuevo.' : '. Intenta de nuevo.') });
       }
       if (kind === 'calories') {
-        // Estima calorías y peso de las comidas de un día; guarda el resultado en meals[date].nutri
-        const day = typeof body?.date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(body.date) ? body.date : todayKey();
+        // Estima calorías y peso de las comidas de un día; guarda el resultado en meals[date].nutri.
+        // Usa los pesos registrados por alimento y las fotos de cada franja (visión de la IA).
+        const day = typeof body?.date === 'string' && VALID_DATE.test(body.date) ? body.date : todayKey();
         const m = (data.meals || {})[day] || {};
-        const fields = [['Desayuno', m.breakfast], ['Almuerzo', m.lunch], ['Comida', m.dinner], ['Merienda', m.snacks], ['Cena', m.supper], ['Snacks', m.extra]]
-          .filter(([, v]) => String(v || '').trim()).map(([k, v]) => `${k}: ${v}`).join('\n') || 'sin registros';
+        const slots = [['Desayuno', 'breakfast', m.breakfast], ['Almuerzo', 'lunch', m.lunch], ['Comida', 'dinner', m.dinner], ['Merienda', 'snacks', m.snacks], ['Cena', 'supper', m.supper], ['Snacks', 'extra', m.extra]];
+        // Fotos ya cargadas por franja: se usan para el texto del prompt y para la visión.
+        const photoStore = {};
+        for (const [, field] of slots) {
+          const ph = await readMealPhoto(activeUserId, day, field);
+          if (ph && ph.dataUrl) photoStore[field] = ph.dataUrl;
+        }
+        const photoFields = new Set(Object.keys(photoStore));
+        const textLines = [];
+        for (const [label, field, txt] of slots) {
+          const items = Array.isArray(m.items?.[field]) ? m.items[field] : [];
+          if (items.length) {
+            const wantPhoto = items.some(i => !(Number(i.g) > 0));
+            textLines.push(`${label}: ` + items.map(i => {
+              const nombre = String(i.n || '').trim() || 'alimento';
+              const g = Number(i.g) > 0
+                ? `${Math.round(Number(i.g))} g`
+                : 'peso sin registrar';
+              const falta = wantPhoto && !(i.g > 0) && photoFields.has(field)
+                ? ' (deducir peso de la foto)'
+                : '';
+              return `${nombre} ${g}${falta}`;
+            }).join(' + '));
+          } else if (String(txt || '').trim()) {
+            textLines.push(`${label}: ${String(txt).trim()}`);
+          } else if (photoFields.has(field)) {
+            textLines.push(`${label}: (solo foto)`);
+          }
+        }
+        const content = [{ type: 'text', text: [
+          'Estima las calorías de estas comidas de un día (perfil: ' + (p.weightKg || '?') + ' kg, objetivo ' + (p.goalWeight || '?') + ' kg).',
+          textLines.length ? textLines.join('\n') : 'Sin registros de texto.',
+          'Reglas: si un alimento trae peso en gramos, usalo tal cual. Pesos sin registrar y franjas (solo foto): estimá la porción mirando la foto correspondiente.',
+          'Devuelve EXCLUSIVAMENTE JSON con esta forma: {"items":[{"plato":"nombre","gramos":250,"kcal":400}],"totalKcal":1200,"tip":"consejo de 1 línea"}.',
+          'gramos: peso de la porción (registrado o estimado). kcal: número entero. Sé realista con porciones caseras.',
+        ].join('\n') }];
+        let photos = 0;
+        for (const [label, field] of slots) {
+          if (!photoStore[field]) continue;
+          photos++;
+          content.push({ type: 'text', text: `Foto de ${label.toLowerCase()}:` }, { type: 'image_url', image_url: { url: photoStore[field] } });
+        }
         const raw = await ai([
-          { role: 'system', content: 'Eres un nutricionista que estima calorías. Respondes SOLO con JSON válido, sin markdown ni texto extra.' },
-          { role: 'user', content: [
-            'Estima las calorías y el peso aproximado de estas comidas de un día (perfil: ' + (p.weightKg || '?') + ' kg, objetivo ' + (p.goalWeight || '?') + ' kg).',
-            fields,
-            'Devuelve EXCLUSIVAMENTE JSON con esta forma: {"items":[{"plato":"nombre","gramos":250,"kcal":400}],"totalKcal":1200,"tip":"consejo de 1 línea"}.',
-            'gramos: peso estimado de la porción. kcal: número entero. Sé realista con porciones caseras.'
-          ].join('\n') },
+          { role: 'system', content: 'Eres un calculador de comidas. Respondes SOLO con JSON válido, sin markdown ni texto extra.' },
+          { role: 'user', content },
         ]);
         let parsed = null;
-        try { parsed = JSON.parse(raw.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, '').trim()); } catch (_) {}
+        try { parsed = JSON.parse(String(raw).replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, '').trim()); } catch (_) {}
         if (!parsed || !Array.isArray(parsed.items) || !(parsed.totalKcal >= 0)) {
           return respond(res, 200, { error: 'La IA no devolvió una estimación válida. Intenta de nuevo.' });
         }
@@ -1541,7 +1628,7 @@ const server = http.createServer(async (req, res) => {
         // El nutri llega por otro camino (no PUT ni comando): si no emitimos,
         // la tarjeta de calorías no aparece hasta recargar la app.
         broadcast('state', { origin: 'ui', tab: 'meals' });
-        return respond(res, 200, { ok: true, applied: true, reply: `⚡ Estimación guardada: ≈${Math.round(parsed.totalKcal)} kcal.` });
+        return respond(res, 200, { ok: true, applied: true, reply: `⚡ Estimación guardada: ≈${Math.round(parsed.totalKcal)} kcal.` + (photos ? ` (${photos} foto${photos > 1 ? 's' : ''} analizad${photos > 1 ? 'as' : ''})` : '') });
       }
       if (kind === 'newsbrief') {
         // Resumen en español de titulares del centro de noticias, conectado con lo que el usuario estudia/construye
