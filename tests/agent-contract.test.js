@@ -295,8 +295,26 @@ test('meals.item agrega el alimento con sus gramos a la franja', async () => {
   // No pisa lo que ya había: la lista suma.
   assert.ok(b.json.data.items.some(it => it.n === 'brownie'));
 
+  // Lo que realmente queda guardado es el formato de la app: items[slot].
+  const guardado = (await agent('GET', '/api/data')).json;
+  const dinnerSlot = guardado.meals?.[b.json.data.date]?.items?.dinner;
+  assert.ok(Array.isArray(dinnerSlot), 'items de la franja debe ser un array (la app no pinta un array plano)');
+  assert.ok(dinnerSlot.some(it => it.n === 'yogur') && dinnerSlot.some(it => it.n === 'brownie'));
+  assert.ok(!Array.isArray(guardado.meals[b.json.data.date].items), 'no debe quedar el formato plano viejo');
+
   const c = await cmd('meals.item', { slot: 'almuerzo', name: 'x' });
   assert.equal(c.status, 422, 'slot fuera de MEAL_SLOTS se rechaza');
+});
+
+test('meals.item migra un array plano viejo a la franja', async () => {
+  // Formato anterior del agente: day.items era [{ n, g }, ...] sin franja.
+  const today = new Date().toISOString().slice(0, 10);
+  const r = await cmd('meals.item', { slot: 'breakfast', name: 'alfajor', grams: 60 });
+  assert.equal(r.status, 200);
+  const data = (await agent('GET', '/api/data')).json;
+  const dayItems = data.meals?.[today]?.items;
+  assert.ok(dayItems && !Array.isArray(dayItems), 'items debe quedar como objeto por franja');
+  assert.ok(Array.isArray(dayItems.breakfast) && dayItems.breakfast.some(it => it.n === 'alfajor'));
 });
 
 test('health.measure guarda y actualiza el mismo día', async () => {
