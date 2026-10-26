@@ -1019,6 +1019,49 @@ window.delMealPhoto = async function (f) {
   mealPhotoCache[mealDate + '|' + f] = null;
   setPhThumb(f, null);
 };
+function mealDayStats(k) {
+  const m = D.meals[k] || {};
+  const items = Object.values(m.items || {}).reduce((a, arr) => a + (Array.isArray(arr) ? arr.length : 0), 0);
+  const hasTxt = ['breakfast', 'lunch', 'dinner', 'snacks', 'supper', 'extra'].some(f => String(m[f] || '').trim());
+  return { kcal: m.nutri ? m.nutri.totalKcal : null, agua: m.water || 0, items, any: !!(hasTxt || items > 0 || m.nutri || (m.water || 0) > 0) };
+}
+function mealsHistoryHtml() {
+  const keys = Object.keys(D.meals || {}).filter(k => /^\d{4}-\d{2}-\d{2}$/.test(k)).sort().reverse();
+  if (!keys.length) return '';
+  const rows = keys.map(k => ({ k, ...mealDayStats(k) })).filter(s => s.any).slice(0, 21);
+  if (!rows.length) return '';
+  // Comparativa: últimos 7 días calendario (con estimación) vs los 7 anteriores
+  const hoy = today();
+  const inRange = (k, from, to) => k <= to && k > from; // to es inclusivo del tope
+  const shiftF = (n) => { const d = new Date(hoy + 'T12:00:00'); d.setDate(d.getDate() + n); return d.toISOString().slice(0, 10); };
+  const mealDays = keys.filter(k => D.meals[k]?.nutri);
+  const last7 = mealDays.filter(k => inRange(k, shiftF(-7), hoy));
+  const prev7 = mealDays.filter(k => inRange(k, shiftF(-14), shiftF(-7)));
+  const avg = (a) => a.length ? Math.round(a.reduce((s, k) => s + D.meals[k].nutri.totalKcal, 0) / a.length) : null;
+  const a1 = avg(last7), a2 = avg(prev7);
+  const target = (() => { const b = bmr(); const p = D.profile || {}; return p.goalWeight && p.weightKg ? Math.round(p.goalWeight < p.weightKg ? (b || 2000) - 500 : (b || 2000)) : null; })();
+  const agua7 = last7.length ? Math.round(last7.reduce((s, k) => s + (D.meals[k].water || 0), 0) / last7.length * 10) / 10 : null;
+  const maxKcal = Math.max(...rows.map(r => r.kcal || 0), 1);
+  const trend = a1 == null ? '' : a2 == null
+    ? `<div class="meta" style="margin-top:8px">Media últimos 7 días: <strong>${a1} kcal/día</strong>${target ? ` · objetivo ≈${target}` : ''} · agua ≈${agua7 ?? 0} vasos/día</div>`
+    : (() => { const d = a1 - a2; const up = d > 0; const pct = Math.round(Math.abs(d) / a2 * 100); return `<div class="meta" style="margin-top:8px">Media últimos 7 días: <strong>${a1} kcal/día</strong> vs. los 7 anteriores: ${a2} kcal/día → ${up ? '▲ +' : '▼ −'}${pct}%${target ? ` · objetivo ≈${target} kcal (${a1 <= target ? 'dentro del objetivo ✓' : 'por encima ⚠'})` : ''} · agua ≈${agua7 ?? 0} vasos/día</div>`; })();
+  return `
+    <div class="card">
+      <strong>📈 Historial y comparativas</strong>
+      <div class="meta" style="margin:4px 0 10px">${rows.length} día${rows.length > 1 ? 's' : ''} registrado${rows.length > 1 ? 's' : ''} · lo que anotás queda guardado por fecha, no se pisa</div>
+      <div style="display:flex;align-items:flex-end;gap:6px;height:76px;margin:6px 0 10px">
+        ${rows.slice().reverse().map(r => `<div style="flex:1;display:flex;flex-direction:column;justify-content:flex-end;height:100%;text-align:center" title="${r.k}: ${r.kcal ?? 'sin estimar'} kcal, ${r.agua} vasos, ${r.items} alimentos">
+          ${r.kcal != null ? `<div style="background:linear-gradient(180deg,#2eb67a,#63d68d);border-radius:4px 4px 0 0;height:${Math.max(6, Math.round(r.kcal / maxKcal * 62))}px" aria-hidden="true"></div>` : `<div style="height:6px"><div style="height:4px;background:rgba(255,255,255,.25);border-radius:2px"></div></div>`}
+          <div class="meta" style="font-size:9.5px;margin-top:2px">${r.k.slice(8)}</div>
+        </div>`).join('')}
+      </div>
+      <div class="hist-list" style="max-height:220px;overflow:auto">
+        ${rows.map(r => `<li><span>${r.k === hoy ? '📌' : ''} ${fmtDate(r.k)}${r.k === hoy ? ' (hoy)' : ''}</span> ${r.kcal != null ? `≈${r.kcal} kcal` : 'sin estimar'} · ${r.agua} vasos · ${r.items} alimento${r.items === 1 ? '' : 's'}</li>`).join('')}
+      </div>
+      ${trend}
+    </div>
+  `;
+}
 function viewMeals() {
   const key = mealDate;
   const m = D.meals[key] || {};
@@ -1075,6 +1118,7 @@ function viewMeals() {
       ${m.nutri.tip ? `<p class="meta">${ICON('sparkle')} ${esc(m.nutri.tip)}</p>` : ''}` : '<p class="meta">La IA estima kcal y peso de lo que registraste este día.</p>'}
       <div id="nutriOut" class="ai-out" hidden></div>
     </div>
+    ${mealsHistoryHtml()}
   `;
 }
 window.askCalories = async function () {
