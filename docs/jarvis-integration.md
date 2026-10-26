@@ -385,6 +385,7 @@ acentos ni mayúsculas). Para hacerlo natural por voz, `habits.check` también a
 | `habits.check` | `id` o `match`, `date` | `PATCH { log }` |
 | `habits.add` | `name`, `icon`, `targetPerWeek` | `POST /api/habits` |
 | `meals.log` | `date`, `slot`, `text` | `PUT /api/data` con `meals` |
+| `meals.item` | `date`, `slot`, `name`, `grams` | Agrega `{ n, g }` a `items[date][slot]` |
 | `water.add` | `glasses` (1–8), `date` | `PUT /api/data` con `meals` |
 | `shopping.add` | `name`, `qty` | `POST /api/shopping` |
 | `shopping.check` | `id` o `match` | `PATCH { done: true }` |

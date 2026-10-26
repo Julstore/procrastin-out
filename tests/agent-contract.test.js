@@ -125,7 +125,7 @@ test('catalog lista los comandos disponibles', async () => {
   assert.equal(r.status, 200);
   assert.ok(r.json.data.commands.length >= 30);
   const names = r.json.data.commands.map(c => c.name);
-  for (const n of ['tasks.add', 'tasks.complete', 'habits.check', 'water.add', 'nav.open', 'undo']) {
+  for (const n of ['tasks.add', 'tasks.complete', 'habits.check', 'meals.item', 'water.add', 'nav.open', 'undo']) {
     assert.ok(names.includes(n), `falta ${n} en el catálogo`);
   }
   assert.match(r.json.say, /comandos/);
@@ -278,6 +278,25 @@ test('water.add respeta el tope de 8 vasos por día', async () => {
   const c = await cmd('water.add', { glasses: 2 });
   assert.equal(c.json.data.added, 0);
   assert.equal(c.json.game, null);
+});
+
+test('meals.item agrega el alimento con sus gramos a la franja', async () => {
+  const a = await cmd('meals.item', { slot: 'dinner', name: 'brownie', grams: 200 });
+  assert.equal(a.status, 200);
+  assert.deepEqual(a.json.data.items.at(-1), { n: 'brownie', g: 200 });
+  assert.match(a.json.say, /200/);
+
+  const b = await cmd('meals.item', { slot: 'dinner', name: 'yogur' });
+  assert.equal(b.status, 200);
+  const dinner = b.json.data.items.filter(it => it.n === 'yogur');
+  assert.equal(dinner.length, 1);
+  assert.equal(dinner[0].g, null, 'sin gramos dichos queda null');
+
+  // No pisa lo que ya había: la lista suma.
+  assert.ok(b.json.data.items.some(it => it.n === 'brownie'));
+
+  const c = await cmd('meals.item', { slot: 'almuerzo', name: 'x' });
+  assert.equal(c.status, 422, 'slot fuera de MEAL_SLOTS se rechaza');
 });
 
 test('health.measure guarda y actualiza el mismo día', async () => {
