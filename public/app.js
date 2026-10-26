@@ -669,6 +669,41 @@ window.addHabit = async function () {
 };
 
 // ---------- Salud ----------
+// Perfil (altura/peso/edad) + acciones de IA de dieta; vive en la pestaña Salud.
+function chipsPerfilYAcciones() {
+  const p = D.profile || {};
+  const bmi = bmiInfo();
+  const b = bmr();
+  const calTarget = p.goalWeight && p.weightKg ? (p.goalWeight < p.weightKg ? Math.round((b || 2000) - 500) : (b || 2000)) : null;
+  return `
+    <div class="card profile-card">
+      <h3 style="margin-top:0">${ICON('profile')} Tu perfil</h3>
+      <div class="profile-grid">
+        <label>Altura (cm)<input type="number" id="pf-height" value="${p.heightCm || ''}" placeholder="175"></label>
+        <label>Peso (kg)<input type="number" id="pf-weight" value="${p.weightKg || ''}" placeholder="80"></label>
+        <label>Edad<input type="number" id="pf-age" value="${p.age || ''}"></label>
+        <label>Sexo<select id="pf-sex"><option value="m" ${p.sex === 'm' ? 'selected' : ''}>Masculino</option><option value="f" ${p.sex === 'f' ? 'selected' : ''}>Femenino</option></select></label>
+        <label>Peso objetivo (kg)<input type="number" id="pf-goal" value="${p.goalWeight || ''}" placeholder="70"></label>
+        <label>Actividad<select id="pf-act">
+          <option value="1.2" ${p.activity === '1.2' ? 'selected' : ''}>Sedentario</option>
+          <option value="1.375" ${p.activity === '1.375' ? 'selected' : ''}>Ligero (1-3 días/semana)</option>
+          <option value="1.55" ${p.activity === '1.55' ? 'selected' : ''}>Moderado (3-5 días)</option>
+          <option value="1.725" ${p.activity === '1.725' ? 'selected' : ''}>Intenso (6-7 días)</option>
+        </select></label>
+      </div>
+      <div class="profile-stats">
+        ${bmi ? `<span class="cat-chip">IMC ${bmi.bmi} · ${bmi.cat}</span>` : ''}
+        ${b ? `<span class="cat-chip">TMB ${b} kcal</span>` : ''}
+        ${calTarget ? `<span class="cat-chip">Objetivo diario ≈ ${calTarget} kcal</span>` : ''}
+      </div>
+      <div class="row" style="margin-top:10px">
+        <button class="btn" onclick="saveProfile()">Guardar perfil</button>
+        <button class="btn ghost" onclick="askAi('diet')">${ICON('meals')} Cambios de dieta recomendados por IA</button>
+        <button class="btn ghost" onclick="askAi('plan')">${ICON('calendar')} Plan de dieta semanal con IA</button>
+      </div>
+      <div id="aiOut" class="ai-out" hidden></div>
+    </div>`;
+}
 const DAYS = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado', 'Domingo'];
 const EX_MERGED = ({
   pecho: ['Press banca', 'Flexiones', 'Aperturas con mancuernas'],
@@ -691,6 +726,8 @@ var viewHealth = function () {
       <div class="stat-card"><div class="num">${w ? w + ' kg' : '—'}</div><div class="lbl">Último peso</div></div>
       <div class="stat-card"><div class="num">${todayW != null ? todayW + ' kg' : '—'}</div><div class="lbl">Peso hoy</div></div>
     </div>
+
+    ${chipsPerfilYAcciones()}
 
     <h3>${ICON('body')} Rutina de ejercicios</h3>
     <p class="meta">Planifica tu semana: elige muscle groups y ejercicios para cada día. Marca lo que completes.</p>
@@ -853,7 +890,7 @@ async function requestRoutine(kind, loadingMsg) {
       render();
     } else {
       out.className = 'ai-out';
-      out.innerHTML = `<span style="color:var(--danger)">${esc(res.error || 'No se pudo generar la rutina')}</span><p class="meta" style="margin-top:6px">Consejo: completa tu perfil (altura, peso, edad, objetivo) en la pestaña Alimentación para mejores resultados.</p>`;
+      out.innerHTML = `<span style="color:var(--danger)">${esc(res.error || 'No se pudo generar la rutina')}</span><p class="meta" style="margin-top:6px">Consejo: completa tu perfil (altura, peso, edad, objetivo) en la pestaña Salud para mejores resultados.</p>`;
     }
   } catch (e) {
     out.className = 'ai-out';
@@ -921,39 +958,10 @@ function viewMeals() {
   const m = D.meals[key] || {};
   const water = m.water || 0;
   const p = D.profile || {};
-  const bmi = bmiInfo();
   const b = bmr();
   const calTarget = p.goalWeight && p.weightKg ? (p.goalWeight < p.weightKg ? Math.round((b || 2000) - 500) : (b || 2000)) : null;
   return `
     <h2>${ICON('fruit')} Alimentación</h2>
-
-    <div class="card profile-card">
-      <h3 style="margin-top:0">${ICON('profile')} Tu perfil</h3>
-      <div class="profile-grid">
-        <label>Altura (cm)<input type="number" id="pf-height" value="${p.heightCm || ''}" placeholder="175"></label>
-        <label>Peso (kg)<input type="number" id="pf-weight" value="${p.weightKg || ''}" placeholder="80"></label>
-        <label>Edad<input type="number" id="pf-age" value="${p.age || ''}"></label>
-        <label>Sexo<select id="pf-sex"><option value="m" ${p.sex === 'm' ? 'selected' : ''}>Masculino</option><option value="f" ${p.sex === 'f' ? 'selected' : ''}>Femenino</option></select></label>
-        <label>Peso objetivo (kg)<input type="number" id="pf-goal" value="${p.goalWeight || ''}" placeholder="70"></label>
-        <label>Actividad<select id="pf-act">
-          <option value="1.2" ${p.activity === '1.2' ? 'selected' : ''}>Sedentario</option>
-          <option value="1.375" ${p.activity === '1.375' ? 'selected' : ''}>Ligero (1-3 días/semana)</option>
-          <option value="1.55" ${p.activity === '1.55' ? 'selected' : ''}>Moderado (3-5 días)</option>
-          <option value="1.725" ${p.activity === '1.725' ? 'selected' : ''}>Intenso (6-7 días)</option>
-        </select></label>
-      </div>
-      <div class="profile-stats">
-        ${bmi ? `<span class="cat-chip">IMC ${bmi.bmi} · ${bmi.cat}</span>` : ''}
-        ${b ? `<span class="cat-chip">TMB ${b} kcal</span>` : ''}
-        ${calTarget ? `<span class="cat-chip">Objetivo diario ≈ ${calTarget} kcal</span>` : ''}
-      </div>
-      <div class="row" style="margin-top:10px">
-        <button class="btn" onclick="saveProfile()">Guardar perfil</button>
-        <button class="btn ghost" onclick="askAi('diet')">${ICON('meals')} Cambios de dieta recomendados por IA</button>
-        <button class="btn ghost" onclick="askAi('plan')">${ICON('calendar')} Plan de dieta semanal con IA</button>
-      </div>
-      <div id="aiOut" class="ai-out" hidden></div>
-    </div>
 
     <div class="meal-nav">
       <button class="btn ghost small" onclick="shiftMeal(-1)" aria-label="Día anterior">${ICON('left')}</button>
