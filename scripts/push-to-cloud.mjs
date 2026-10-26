@@ -9,7 +9,12 @@ const url = process.env.DATABASE_URL;
 if (!url) { console.error('❌ Falta DATABASE_URL en el entorno.'); process.exit(1); }
 const root = process.argv[2] || path.join(process.cwd(), 'data');
 
-const pool = new pg.Pool({ connectionString: url, ssl: { rejectUnauthorized: false }, max: 1 });
+const pool = new pg.Pool({
+  connectionString: url,
+  // Con sslmode=disable se respeta (Postgres local); la nube sigue por defecto con SSL.
+  ...(/sslmode=(disable|allow)/i.test(url) ? {} : { ssl: { rejectUnauthorized: false } }),
+  max: 1,
+});
 await pool.query('CREATE TABLE IF NOT EXISTS pout_kv (k TEXT PRIMARY KEY, v JSONB NOT NULL)');
 for (const [k, f] of [['data', 'vida.json'], ['auth', 'auth.json']]) {
   const p = path.join(root, f);

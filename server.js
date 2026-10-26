@@ -4,6 +4,9 @@ const http = require('http');
 const fs = require('fs');
 const crypto = require('crypto');
 const os = require('os');
+const { makeUser, checkPin, findByUsername, migrateLegacyAuth } = require('./lib/users');
+const { loadUserData, saveUserData, migrateLegacyData } = require('./lib/user-store');
+const { pgKv } = require('./lib/kv');
 const path = require('path');
 const { assertPublicFeedUrl, fetchPublicFeed, stripTags, parseRssItems, clientIpFrom } = require('./lib/feed-safety');
 const { limitsFromEnv, getUsage, quotaError, reserveRequest, tokenCounts, recordCall, TtlCache, cacheKey } = require('./lib/ai-budget');
@@ -61,21 +64,22 @@ let dbPool = null;
 function db() {
   if (!USE_DB) return null;
   if (!dbPool) {
-    const { Pool } = require('pg'); // solo se carga en la nube
-    dbPool = new Pool({ connectionString: DATABASE_URL, ssl: { rejectUnauthorized: false }, max: 3 });
-    dbPool.on('error', (e) => console.error('PG pool:', e.message));
+    // Pruebas: POUT_TEST_PG_POOL_FILE apunta a un módulo que exporta un pool compatible con `pg`.
+    if (process.env.POUT_TEST_PG_POOL_FILE) {
+      dbPool = require(process.env.POUT_TEST_PG_POOL_FILE)();
+    } else {
+      const { Pool } = require('pg'); // solo se carga en la nube
+      // SSL por defecto (Neon/Render lo exigen); con sslmode=disable se respeta (Postgres local).
+      const sinSsl = /sslmode=(disable|allow)/i.test(DATABASE_URL);
+      dbPool = new Pool({
+        connectionString: DATABASE_URL,
+        ...(sinSsl ? {} : { ssl: { rejectUnauthorized: false } }),
+        max: 3,
+      });
+      dbPool.on('error', (e) => console.error('PG pool:', e.message));
+    }
   }
   return dbPool;
-}
-async function dbInit() {
-  await db().query('CREATE TABLE IF NOT EXISTS pout_kv (k TEXT PRIMARY KEY, v JSONB NOT NULL)');
-}
-async function dbGet(key) {
-  const { rows } = await db().query('SELECT v FROM pout_kv WHERE k = $1', [key]);
-  return rows.length ? rows[0].v : null;
-}
-async function dbSet(key, val) {
-  await db().query('INSERT INTO pout_kv (k, v) VALUES ($1, $2) ON CONFLICT (k) DO UPDATE SET v = EXCLUDED.v', [key, val]);
 }
 // URL pública cuando corre en la nube (Render la inyecta sola; si no, PUBLIC_URL manual)
 function publicBase() {
@@ -131,20 +135,54 @@ function ensureData() {
 }
 
 let data = USE_DB ? freshDefaults() : ensureData(); // en la nube se carga desde Postgres en boot()
+// Cuenta activa de la petición en curso. Los datos de cada cuenta viven en su propio archivo
+// (data/users/<id>.json); la variable `data` es la cuenta de la sesión que se está atendiendo.
+let activeUserId = 'admin';
+const USER_DATA = new Map(); // userId -> data en memoria
+function useUser(userId) {
+  activeUserId = userId;
+  if (!USER_DATA.has(userId)) {
+    // En la nube, toda cuenta ya fue cargada desde Postgres al arrancar: una cuenta ausente
+    // no se inventa vacía (eso pisaría sus datos reales al guardar).
+    if (USE_DB) throw new Error('Cuenta no cargada desde la base: ' + userId);
+    const stored = loadUserData(DATA_DIR, userId);
+    USER_DATA.set(userId, stored ? withDefaults(stored) : freshDefaults());
+  }
+  data = USER_DATA.get(userId);
+}
+// Crea los datos vacíos de una cuenta nueva y los persiste (en la nube, en su propia fila).
+function initUserData(userId) {
+  USER_DATA.set(userId, freshDefaults());
+  if (USE_DB) kvStore.set(dbKeyFor(userId), USER_DATA.get(userId)).catch(e => console.error('Error al crear cuenta en DB:', e.message));
+  else saveUserData(DATA_DIR, userId, USER_DATA.get(userId));
+}
+// En la nube cada cuenta vive en su propia fila de pout_kv: `data:<id>`.
+// La fila antigua `data` (un solo bloque) pertenece a la cuenta admin.
+function dbKeyFor(userId) { return 'data:' + userId; }
+let kvStore = null; // pgKv(pool) en la nube; las pruebas usan el doble en memoria
 
 // Guardado con debounce para no escribir en cada tecla
 let saveTimer = null;
 function doSave() {
-  if (USE_DB) { dbSet('data', data).catch(e => console.error('Error al guardar en DB:', e.message)); return; }
+  if (USE_DB) { kvStore.set(dbKeyFor(activeUserId), data).catch(e => console.error('Error al guardar en DB:', e.message)); return; }
   try {
-    fs.writeFileSync(DATA_FILE, JSON.stringify(data, null, 2), 'utf8');
+    saveUserData(DATA_DIR, activeUserId, data);
   } catch (e) {
     console.error('Error al guardar:', e.message);
   }
 }
+// Guardar al cerrar (flush) escribe la cuenta activa con sus datos actuales.
 function save() {
   clearTimeout(saveTimer);
-  saveTimer = setTimeout(doSave, 150);
+  // Fijamos la cuenta y sus datos ahora: el debounce no debe escribir en la cuenta de otra petición.
+  const userId = activeUserId;
+  const snapshot = data;
+  USER_DATA.set(userId, snapshot);
+  saveTimer = setTimeout(() => {
+    if (USE_DB) { kvStore.set(dbKeyFor(userId), snapshot).catch(e => console.error('Error al guardar en DB:', e.message)); return; }
+    try { saveUserData(DATA_DIR, userId, snapshot); }
+    catch (e) { console.error('Error al guardar:', e.message); }
+  }, 150);
 }
 // La app de escritorio lo usa al cerrar para no perder el último cambio. Inofensivo con `node server.js`.
 module.exports = { flush: () => { clearTimeout(saveTimer); doSave(); } };
@@ -162,7 +200,7 @@ function loadAuth() {
 }
 function saveAuth(a) {
   authCache = a;
-  if (USE_DB) { dbSet('auth', a).catch(e => console.error('Error al guardar auth en DB:', e.message)); return; }
+  if (USE_DB) { kvStore.set('auth', a).catch(e => console.error('Error al guardar auth en DB:', e.message)); return; }
   try { fs.writeFileSync(AUTH_FILE, JSON.stringify(a), 'utf8'); } catch (e) { console.error('Error al guardar auth:', e.message); }
 }
 function hashPin(pin, salt) {
@@ -193,6 +231,8 @@ function loginFail(ip) {
 const SESSION_IDLE_MS = 12 * 3600 * 1000;
 const SESSION_MAX_MS = 7 * 24 * 3600 * 1000;
 const SESSIONS = new Map(); // token -> {createdAt, lastSeen}
+const INVITES = new Map(); // token -> {createdAt, by}
+const INVITE_TTL_MS = 7 * 24 * 3600 * 1000;
 function sessionExpired(s, now = Date.now()) {
   return now - s.lastSeen > SESSION_IDLE_MS || now - s.createdAt > SESSION_MAX_MS;
 }
@@ -200,12 +240,18 @@ function purgeSessions() {
   const now = Date.now();
   for (const [t, s] of SESSIONS) if (sessionExpired(s, now)) SESSIONS.delete(t);
 }
-function newSession() {
+function newSession(userId) {
   purgeSessions();
   const token = crypto.randomBytes(32).toString('hex');
   const now = Date.now();
-  SESSIONS.set(token, { createdAt: now, lastSeen: now });
+  SESSIONS.set(token, { createdAt: now, lastSeen: now, userId });
   return token;
+}
+// Lista de cuentas. Un auth.json viejo (un solo PIN) se convierte en la cuenta admin.
+function accountsList() {
+  const a = loadAuth();
+  if (Array.isArray(a.users)) return a.users;
+  return migrateLegacyAuth(a);
 }
 function getSession(req) {
   const m = (req.headers.cookie || '').match(/(?:^|;\s*)pout_sess=([a-f0-9]{64})/);
@@ -1100,31 +1146,30 @@ const server = http.createServer(async (req, res) => {
     // ---- Auth (PIN local) ----
     const clientIp = clientIpFrom(req, process.env.TRUST_PROXY === '1');
     if (pathname === '/api/auth/status' && req.method === 'GET') {
-      const a = loadAuth();
-      return respond(res, 200, { setup: !!a.pinHash, unlocked: !!getSession(req) });
+      return respond(res, 200, { setup: accountsList().length > 0, unlocked: !!getSession(req) });
     }
     if (pathname === '/api/auth/setup' && req.method === 'POST') {
-      const a = loadAuth();
-      if (a.pinHash) return respond(res, 400, { error: 'El PIN ya está configurado' });
+      if (accountsList().length) return respond(res, 400, { error: 'El PIN ya está configurado' });
       const body = await getBody(req);
-      const pin = String(body?.pin || '');
-      if (pin.length < 4 || pin.length > 64) return respond(res, 400, { error: 'El PIN debe tener al menos 4 caracteres' });
-      const salt = crypto.randomBytes(16).toString('hex');
-      saveAuth({ pinHash: hashPin(pin, salt), salt, createdAt: new Date().toISOString() });
-      const token = newSession();
+      let admin;
+      try { admin = makeUser({ username: 'admin', pin: body?.pin, role: 'admin', id: 'admin' }); }
+      catch (e) { return respond(res, 400, { error: e.message }); }
+      saveAuth({ users: [admin] });
+      const token = newSession(admin.id);
       res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8', 'Set-Cookie': SESSION_COOKIE(token) });
       return res.end(JSON.stringify({ ok: true }));
     }
     if (pathname === '/api/auth/login' && req.method === 'POST') {
       const wait = loginBlocked(clientIp);
       if (wait > 0) return respond(res, 429, { error: `Demasiados intentos. Espera ${wait} s` });
-      const a = loadAuth();
       const body = await getBody(req);
-      const ok = pinOk(body?.pin, a);
+      const users = accountsList();
+      const user = findByUsername(users, body?.username || 'admin');
+      const ok = !!user && checkPin(user, body?.pin);
       if (!ok) await new Promise(r => setTimeout(r, 600)); // demora ante fallos
-      if (!ok) { loginFail(clientIp); return respond(res, 401, { error: 'PIN incorrecto' }); }
+      if (!ok) { loginFail(clientIp); return respond(res, 401, { error: 'Usuario o PIN incorrectos' }); }
       LOGIN_FAILS.delete(clientIp);
-      const token = newSession();
+      const token = newSession(user.id);
       res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8', 'Set-Cookie': SESSION_COOKIE(token) });
       return res.end(JSON.stringify({ ok: true }));
     }
@@ -1136,32 +1181,77 @@ const server = http.createServer(async (req, res) => {
     }
     if (pathname === '/api/auth/change' && req.method === 'POST') {
       if (!getSession(req)) return respond(res, 401, { error: 'No autenticado' });
-      const a = loadAuth();
+      const sid = getSession(req);
+      const me = accountsList().find(u => u.id === SESSIONS.get(sid)?.userId);
       const body = await getBody(req);
-      if (!pinOk(body?.current, a)) return respond(res, 401, { error: 'El PIN actual no coincide' });
-      const pin = String(body?.pin || '');
-      if (pin.length < 4 || pin.length > 64) return respond(res, 400, { error: 'El PIN debe tener al menos 4 caracteres' });
-      const salt = crypto.randomBytes(16).toString('hex');
-      saveAuth({ ...a, pinHash: hashPin(pin, salt), salt });
-      // Cambiar el PIN cierra todas las sesiones (incluidas las de otros dispositivos).
-      // La sesión actual se reemplaza por una nueva para no desloguear a quien cambió el PIN.
-      SESSIONS.clear();
-      const token = newSession();
+      if (!me || !checkPin(me, body?.current)) return respond(res, 401, { error: 'El PIN actual no coincide' });
+      let fresh;
+      try { fresh = makeUser({ username: me.username, pin: body?.pin, role: me.role, id: me.id }); }
+      catch (e) { return respond(res, 400, { error: e.message }); }
+      saveAuth({ users: accountsList().map(u => (u.id === me.id ? fresh : u)) });
+      // Cambiar el PIN cierra las sesiones de esa cuenta; la actual se renueva.
+      for (const [t, s] of SESSIONS) if (s.userId === me.id) SESSIONS.delete(t);
+      const token = newSession(me.id);
       res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8', 'Set-Cookie': SESSION_COOKIE(token) });
       return res.end(JSON.stringify({ ok: true }));
     }
+    // Alta de cuentas: solo el admin. Crea un usuario con su PIN.
+    // Invitaciones de un solo uso. El admin genera el token; el amigo lo canjea eligiendo usuario y PIN.
+    if (pathname === '/api/invites' && req.method === 'POST') {
+      const sid = getSession(req);
+      if (!sid) return respond(res, 401, { error: 'No autenticado', login: '/login.html' });
+      const me = accountsList().find(u => u.id === SESSIONS.get(sid)?.userId);
+      if (!me || me.role !== 'admin') return respond(res, 403, { error: 'Solo el admin puede invitar' });
+      const token = crypto.randomBytes(24).toString('hex');
+      INVITES.set(token, { createdAt: Date.now(), by: me.id });
+      return respond(res, 200, { ok: true, token, path: '/invite.html?t=' + token });
+    }
+    if (pathname === '/api/invites/redeem' && req.method === 'POST') {
+      const body = await getBody(req);
+      const inv = INVITES.get(String(body?.token || ''));
+      if (!inv || Date.now() - inv.createdAt > INVITE_TTL_MS) return respond(res, 410, { error: 'La invitación no es válida o ya se usó' });
+      let user;
+      try { user = makeUser({ username: body?.username, pin: body?.pin }); }
+      catch (e) { return respond(res, 400, { error: e.message }); }
+      const users = accountsList();
+      if (findByUsername(users, user.username)) return respond(res, 409, { error: 'Ese usuario ya existe' });
+      INVITES.delete(String(body.token)); // un solo uso: se invalida al canjearla
+      saveAuth({ users: [...users, user] });
+      initUserData(user.id);
+      const token = newSession(user.id);
+      res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8', 'Set-Cookie': SESSION_COOKIE(token) });
+      return res.end(JSON.stringify({ ok: true }));
+    }
+    if (pathname === '/api/users' && req.method === 'POST') {
+      const sid = getSession(req);
+      const me = accountsList().find(u => u.id === SESSIONS.get(sid)?.userId);
+      if (!me || me.role !== 'admin') return respond(res, 403, { error: 'Solo el admin puede crear cuentas' });
+      const body = await getBody(req);
+      const users = accountsList();
+      let user;
+      try { user = makeUser({ username: body?.username, pin: body?.pin }); }
+      catch (e) { return respond(res, 400, { error: e.message }); }
+      if (findByUsername(users, user.username)) return respond(res, 409, { error: 'Ese usuario ya existe' });
+      saveAuth({ users: [...users, user] });
+      initUserData(user.id);
+      return respond(res, 200, { ok: true, username: user.username });
+    }
     // Puerta: páginas y API exigen sesión válida (login.html siempre público).
     // El token de agente solo abre /api/agent/* y las lecturas declaradas.
-    const sessionOk = !!getSession(req);
+    const sid = getSession(req);
+    const sessionOk = !!sid;
+    if (sessionOk) useUser(SESSIONS.get(sid).userId);
     const bearer = agentTokenFrom(req);
     const tokenOk = tokenMatches(bearer);
+    // Jarvis (token de agente) opera solo sobre la cuenta admin, nunca sobre la de otra sesión.
+    if (!sessionOk && tokenOk) useUser('admin');
     if (bearer && !tokenOk) agentTokenFailed();
     if (!sessionOk && !(tokenOk && agentScopeOk(req, pathname)) && !PUBLIC_ASSETS.has(pathname)) {
       if (pathname.startsWith('/api/')) {
         if (agentTokenBlocked()) return respond(res, 429, { error: 'Demasiados intentos con token de agente' });
         return respond(res, 401, { error: bearer ? 'Token de agente inválido' : 'No autenticado', login: '/login.html' });
       }
-      if (pathname !== '/login.html') {
+      if (pathname !== '/login.html' && pathname !== '/invite.html') {
         res.writeHead(302, { Location: '/login.html' });
         return res.end();
       }
@@ -1224,6 +1314,7 @@ const server = http.createServer(async (req, res) => {
       for (const k of Object.keys(body)) if (!PUTABLE_TOP.has(k)) delete body[k];
       const before = { routine: data.routine, meals: data.meals, projects: data.projects, learning: data.learning };
       data = { ...data, ...body };
+      USER_DATA.set(activeUserId, data);
       let game = null;
       try { game = handleDataPut(before, body); } catch (e) { console.error('rewards:', e.message); }
       save();
@@ -1563,16 +1654,28 @@ const server = http.createServer(async (req, res) => {
 
 const HOST = process.env.HOST || '0.0.0.0';
 async function boot() {
+  if (!USE_DB) {
+    // Modo archivo: la cuenta admin toma los datos actuales (vida.json) si aún no tiene los suyos.
+    migrateLegacyData(DATA_DIR, 'admin');
+    useUser('admin');
+  }
   if (USE_DB) {
-    try {
-      await dbInit();
-      const [d, a] = await Promise.all([dbGet('data'), dbGet('auth')]);
-      if (d && typeof d === 'object') data = withDefaults(d);
-      if (a && typeof a === 'object') authCache = a;
-      console.log('☁️ Datos en Postgres (modo nube)');
-    } catch (e) {
-      console.error('⚠️ Sin Postgres (se sigue en memoria):', e.message);
+    // En la nube NO se arranca sin la base: si Postgres falla, un guardado vacío pisaría datos reales.
+    kvStore = kvStore || pgKv(db()); // misma tabla pout_kv, acceso en lib/kv.js
+    await kvStore.init();
+    const [d, a] = await Promise.all([kvStore.get(dbKeyFor('admin')), kvStore.get('auth')]);
+    if (a && typeof a === 'object') authCache = a; // antes de leer cuentas
+    // Cuenta admin: su fila nueva; si no existe, la fila antigua `data` (un solo bloque).
+    const adminData = d || await kvStore.get('data');
+    USER_DATA.set('admin', adminData && typeof adminData === 'object' ? withDefaults(adminData) : freshDefaults());
+    // Todas las cuentas se cargan desde Postgres antes de atender peticiones.
+    for (const u of accountsList()) {
+      if (u.id === 'admin') continue;
+      const ud = await kvStore.get(dbKeyFor(u.id));
+      USER_DATA.set(u.id, ud && typeof ud === 'object' ? withDefaults(ud) : freshDefaults());
     }
+    useUser('admin');
+    console.log('☁️ Datos en Postgres (modo nube)');
   }
   server.listen(PORT, HOST, () => {
     const pub = publicBase();

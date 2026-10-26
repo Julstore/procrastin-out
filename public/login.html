@@ -94,12 +94,12 @@ async function init(){
     };
     $('#p1').focus();
   } else if (!st.unlocked) {
-    $('#sub').textContent = 'Introduce tu PIN para entrar.';
-    $('#form').innerHTML = pinField('p','Tu PIN') + '<button id="go">Entrar</button>';
-    const go = async () => { try { await api('/api/auth/login',{pin:$('#p').value}); location.href='/'; } catch(e){ err(e.message); } };
+    $('#sub').textContent = 'Entra con tu usuario y tu PIN.';
+    $('#form').innerHTML = '<input type="text" id="u" placeholder="Usuario" autocomplete="username" autocapitalize="none" maxlength="24" style="letter-spacing:0">' + pinField('p','Tu PIN') + '<button id="go">Entrar</button>';
+    const go = async () => { try { await api('/api/auth/login',{username:$('#u').value.trim(), pin:$('#p').value}); location.href='/'; } catch(e){ err(e.message); } };
     $('#go').onclick = go;
     $('#p').onkeydown = e => { if(e.key==='Enter') go(); };
-    $('#p').focus();
+    $('#u').focus();
   } else {
     const cambiarPin = new URLSearchParams(location.search).has('change-pin');
     if (!cambiarPin) { location.replace('/'); return; }

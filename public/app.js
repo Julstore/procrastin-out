@@ -1792,6 +1792,44 @@ document.addEventListener('DOMContentLoaded', async () => {
   // Bloqueo con PIN
   $('#lockBtn').onclick = async () => { await fetch('/api/auth/logout', { method: 'POST' }); location.href = '/login.html'; };
   $('#pinBtn').onclick = () => { location.href = '/login.html?change-pin=1'; };
+  // Invitar: genera un link de un solo uso y lo copia (solo funciona para el admin).
+  $('#inviteBtn').onclick = async () => {
+    const r = await fetch('/api/invites', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok) return showInvite(j.error || 'No se pudo crear la invitación', '');
+    showInvite('Mandá este link a tu amigo. Vale una sola vez.', location.origin + j.path);
+  };
+  // Cuadro propio (no alert/prompt): muestra el link y un botón Copiar.
+  function showInvite(msg, link) {
+    let box = document.getElementById('inviteBox');
+    if (!box) {
+      box = document.createElement('div');
+      box.id = 'inviteBox';
+      box.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.55);display:flex;align-items:center;justify-content:center;z-index:9998;padding:18px';
+      box.innerHTML = '<div style="background:#163A2B;border:1px solid rgba(255,255,255,.12);border-radius:16px;padding:22px;max-width:420px;width:100%;color:#fff">' +
+        '<p id="inviteMsg" style="margin:0 0 12px;font-size:14px"></p>' +
+        '<input id="inviteLink" readonly style="width:100%;box-sizing:border-box;padding:10px;border-radius:10px;border:1px solid rgba(255,255,255,.2);background:rgba(255,255,255,.08);color:#fff;font-size:13px">' +
+        '<div style="display:flex;gap:8px;margin-top:12px;justify-content:flex-end">' +
+        '<button id="inviteCopy" style="padding:10px 16px;border-radius:10px;border:0;background:#2E9D68;color:#fff;font-weight:700;cursor:pointer">Copiar</button>' +
+        '<button id="inviteClose" style="padding:10px 16px;border-radius:10px;border:1px solid rgba(255,255,255,.2);background:transparent;color:#fff;cursor:pointer">Cerrar</button>' +
+        '</div><p id="inviteStatus" style="margin:10px 0 0;font-size:12px;color:#9DB8AA;min-height:16px"></p></div>';
+      document.body.appendChild(box);
+      document.getElementById('inviteClose').onclick = () => box.remove();
+      document.getElementById('inviteCopy').onclick = async () => {
+        const input = document.getElementById('inviteLink');
+        input.select();
+        let ok = false;
+        try { await navigator.clipboard.writeText(input.value); ok = true; }
+        catch (_) { ok = document.execCommand('copy'); }
+        document.getElementById('inviteStatus').textContent = ok ? 'Link copiado.' : 'No se pudo copiar: seleccionalo y copialo a mano.';
+      };
+    }
+    document.getElementById('inviteMsg').textContent = msg;
+    document.getElementById('inviteLink').value = link;
+    document.getElementById('inviteLink').style.display = link ? '' : 'none';
+    document.getElementById('inviteCopy').style.display = link ? '' : 'none';
+    document.getElementById('inviteStatus').textContent = '';
+  }
   // El splash de marca se retira cuando la app ya pintó (aunque falle la carga, no se queda pegado)
   try { await reload(); }
   finally { if (typeof window.poutSplashDone === 'function') window.poutSplashDone(); }

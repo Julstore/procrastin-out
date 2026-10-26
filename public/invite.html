@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>procrastin-out — crear cuenta</title>
+<meta name="theme-color" content="#0D251C">
+<style>
+:root { color-scheme: dark; --bg:#0D251C; --bg-2:#163A2B; --card:rgba(13,37,28,.80); --ink:#FFFFFF; --muted:#9DB8AA; --accent:#2E9D68; --accent-hot:#4CC587; --accent-2:#E67E22; --danger:#ff6f66; --line:rgba(255,255,255,.12); }
+body { font-family:"Manrope","Segoe UI",system-ui,sans-serif; color:var(--ink); display:flex; min-height:100vh; align-items:center; justify-content:center; margin:0; padding:18px; background:linear-gradient(180deg, var(--bg), var(--bg-2)); }
+.box { background:var(--card); border:1px solid var(--line); border-radius:22px; padding:30px 28px; width:100%; max-width:360px; text-align:center; box-shadow:0 24px 60px rgba(0,0,0,.45); }
+h1 { font-size:22px; font-weight:800; margin:0 0 6px; }
+p.sub { color:var(--muted); font-size:13px; margin:0 0 18px; }
+input { width:100%; background:rgba(255,255,255,.08); border:1px solid var(--line); color:var(--ink); border-radius:12px; padding:12px; font-size:16px; margin-bottom:9px; text-align:center; box-sizing:border-box; }
+input:focus { outline:none; border-color:var(--accent-hot); }
+button { width:100%; background:linear-gradient(135deg,var(--accent),var(--accent-2)); color:#fff; border:0; border-radius:12px; padding:12px; font-size:15px; font-weight:800; cursor:pointer; }
+.err { color:var(--danger); font-size:13px; min-height:20px; margin:10px 0 0; font-weight:700; }
+</style>
+</head>
+<body>
+<div class="box">
+  <h1>Crear tu cuenta</h1>
+  <p class="sub" id="sub">Elegí un usuario y un PIN para entrar a procrastin-out.</p>
+  <div id="form">
+    <input type="text" id="u" placeholder="Usuario (a-z, 0-9, _)" autocomplete="username" autocapitalize="none" maxlength="24" style="letter-spacing:0">
+    <input type="password" id="p1" placeholder="PIN (mínimo 4)" autocomplete="new-password" maxlength="64">
+    <input type="password" id="p2" placeholder="Repite el PIN" autocomplete="new-password" maxlength="64">
+    <button id="go">Crear cuenta y entrar</button>
+  </div>
+  <p class="err" id="err"></p>
+</div>
+<script>
+const $ = s => document.querySelector(s);
+const token = new URLSearchParams(location.search).get('t') || '';
+function err(m){ $('#err').textContent = m; }
+if (!token) { $('#form').hidden = true; err('Falta el link de invitación.'); }
+$('#go').onclick = async () => {
+  const u = $('#u').value.trim(), a = $('#p1').value, b = $('#p2').value;
+  if (!/^[a-z0-9_]{3,24}$/i.test(u)) return err('El usuario debe tener 3-24 caracteres (letras, números o _).');
+  if (a.length < 4) return err('El PIN debe tener al menos 4 caracteres.');
+  if (a !== b) return err('Los PIN no coinciden.');
+  const r = await fetch('/api/invites/redeem', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ token, username: u, pin: a }) });
+  const j = await r.json().catch(() => ({}));
+  if (!r.ok) return err(j.error || ('Error ' + r.status));
+  location.href = '/';
+};
+</script>
+</body>
+</html>

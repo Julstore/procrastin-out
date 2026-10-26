@@ -143,7 +143,8 @@ test('al llegar al límite diario se bloquea sin llamar al upstream', async () =
 
 test('el uso persiste en el documento de datos', async () => {
   // El guardado es con debounce (150 ms): esperamos a que el archivo refleje el último cambio.
-  const file = path.join(dataDir, 'vida.json');
+  // Desde las cuentas, los datos de admin viven en data/users/admin.json.
+  const file = path.join(dataDir, 'users', 'admin.json');
   let doc = null;
   for (let i = 0; i < 50; i++) {
     if (fs.existsSync(file)) {
