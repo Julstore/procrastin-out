@@ -518,7 +518,7 @@ function weekPanel() {
       <div class="row" style="gap:8px;margin-top:4px">
         <input type="checkbox" ${t.done ? 'checked' : ''} onchange="patch('tasks','${t.id}',{done:${t.done ? 'false' : 'true'}})">
         <span class="title" style="${t.done ? 'text-decoration:line-through;opacity:.6' : ''}">${esc(t.title)}</span>
-        <span class="priority ${t.priority}">${t.priority}</span>
+        <span class="priority ${t.priority || 'media'}">${t.priority || 'media'}</span>
       </div>`).join('') || '<p class="meta">La semana quedó sin tareas (se eliminaron). Cerrala y armá una nueva.</p>'}
     ${allDone ? '' : `<div class="row" style="justify-content:flex-end;margin-top:6px"><button class="btn ghost small" onclick="claimWeek('${w.id}',true)">Cerrar sin completar</button></div>`}
   </div>`;
@@ -591,8 +591,8 @@ function viewTasks() {
         <div class="row">
           <input type="checkbox" onchange="patch('tasks','${t.id}',{done:true})">
           <span class="title">${esc(t.title)}</span>
-          <span class="priority ${t.priority}">${t.priority}</span>
-          <span class="meta">${esc(t.area)}${t.due ? ' · ' + ICON('calendar') + ' ' + fmtDate(t.due) + (isOverdue(t.due) ? ' ' + ICON('alert') : '') : ''}</span>
+          <span class="priority ${t.priority || 'media'}">${t.priority || 'media'}</span>
+          <span class="meta">${esc(t.area || 'personal')}${t.due ? ' · ' + ICON('calendar') + ' ' + fmtDate(t.due) + (isOverdue(t.due) ? ' ' + ICON('alert') : '') : ''}</span>
           ${w ? `<button class="btn ghost small" onclick="addToWeek('${t.id}')" title="Sumarla al plan de la semana">＋ semana</button>` : ''}
           <button class="icon-btn" onclick="del('tasks','${t.id}')" aria-label="Eliminar tarea">${ICON('trash')}</button>
         </div>
