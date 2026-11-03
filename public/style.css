@@ -905,3 +905,24 @@ button, .btn, nav button, .chip, .cal-day, .wg { touch-action: manipulation; }
   .prog-wrap { flex: 1; width: auto; }
   .tabs { top: 8px; }
 }
+
+/* Celular angosto (≤560px): refina lo que la regla de 760px deja apretado.
+   Auditado a 390px (iPhone): la fila de estado quedaba rota — el badge de
+   progreso colapsaba (el 0% se pisaba con el chip de nivel) y el botón de
+   tema quedaba cortado fuera de la tarjeta. */
+@media (max-width: 560px) {
+  .status-cluster { flex-wrap: wrap; row-gap: 8px; justify-content: flex-start; }
+  .prog-badge { flex: 0 1 auto; min-width: 0; }
+  .prog-wrap { flex: 1 1 56px; min-width: 40px; width: auto; }
+  .agent-status { min-width: 0; flex: 1 1 150px; max-width: 210px; }
+  .agent-status-copy { overflow: hidden; }
+  .agent-status-copy strong { max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
+  .agent-status-copy small { display: none; }
+  /* El botón de tema no salta de fila: cierra la primera línea. */
+  .status-cluster > button:last-child { order: 10; flex: 0 0 auto; }
+  /* Ningún select define el ancho de la página (caso Aprendizaje). */
+  main select { max-width: 100%; }
+  /* El selector de íconos de hábitos no necesita mostrar su scrollbar nativa. */
+  .habit-icon-picker { scrollbar-width: none; }
+  .habit-icon-picker::-webkit-scrollbar { display: none; }
+}

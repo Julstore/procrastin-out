@@ -53,3 +53,4 @@
     bar.querySelector('.ios-hint-ok').addEventListener('click', function () { cerrar(true); });
   } catch (e) { /* nunca romper la página por el aviso */ }
 })();
+/* audit-movil: ab1d02f */
