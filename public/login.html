@@ -133,5 +133,6 @@ if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => navigator.serviceWorker.register('/sw.js', { updateViaCache: 'none' }).catch(() => {}));
 }
 </script>
+<script src="ios-install.js?v=3" defer></script>
 </body>
 </html>

@@ -34,7 +34,7 @@ const PUBLIC_DIR = path.join(__dirname, 'public');
 // Marca e íconos: públicos (sin datos) para que login y la instalación PWA los vean sin sesión.
 // /sw.js también es público: si no, el service worker no puede instalarse desde el login
 // (302 a login.html) y los dispositivos se quedan con la versión vieja en caché.
-const PUBLIC_ASSETS = new Set(['/sw.js', '/cache-guard.js', '/manifest.webmanifest', '/mark-real.png', '/label-real.png', '/icon-192.png', '/icon-512.png', '/icon-180.png', '/icon-maskable-512.png', '/splash-bg.png', '/splash-real.png']);
+const PUBLIC_ASSETS = new Set(['/sw.js', '/cache-guard.js', '/ios-install.js', '/manifest.webmanifest', '/mark-real.png', '/label-real.png', '/icon-192.png', '/icon-512.png', '/icon-180.png', '/icon-maskable-512.png', '/splash-bg.png', '/splash-real.png']);
 const MIME = {
   '.html': 'text/html; charset=utf-8',
   '.js': 'text/javascript; charset=utf-8',
