@@ -440,10 +440,21 @@ function tabNudge(dir) {
   tabTween = { from: tabPos, to: tabPos + dir * step, t0: performance.now(), dur: 420 };
   tabHold();
 }
+function applyPlanTabs(plan) {
+  const isPro = plan === 'pro';
+  $$('#tabsTrack [data-tab][data-pro]').forEach(b => { b.hidden = !isPro; });
+  $$('#tabsTrack [data-clone][data-tab]').forEach(b => { b.remove(); });
+  const cur = $('#tabsTrack [data-tab="' + tab + '"]');
+  if (cur && cur.hidden) tab = 'tasks';
+}
 function initTabs() {
   const track = $('#tabsTrack');
   setTabActive(tab);
   buildTabLoop();
+  fetch('/api/auth/status', { cache: 'no-store' })
+    .then(r => r.json())
+    .then(s => { applyPlanTabs(s.plan); setTabActive(tab); buildTabLoop(); render(); })
+    .catch(() => applyPlanTabs('pro'));
   track.addEventListener('click', e => {
     const b = e.target.closest('[data-tab]');
     if (!b) return;

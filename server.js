@@ -1180,7 +1180,9 @@ const server = http.createServer(async (req, res) => {
     // ---- Auth (PIN local) ----
     const clientIp = clientIpFrom(req, process.env.TRUST_PROXY === '1');
     if (pathname === '/api/auth/status' && req.method === 'GET') {
-      return respond(res, 200, { setup: accountsList().length > 0, unlocked: !!getSession(req) });
+      const sid = getSession(req);
+      const me = sid ? accountsList().find(u => u.id === SESSIONS.get(sid)?.userId) : null;
+      return respond(res, 200, { setup: accountsList().length > 0, unlocked: !!sid, plan: me?.plan === 'free' ? 'free' : 'pro' });
     }
     if (pathname === '/api/auth/setup' && req.method === 'POST') {
       if (accountsList().length) return respond(res, 400, { error: 'El PIN ya está configurado' });
