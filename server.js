@@ -163,10 +163,13 @@ let kvStore = null; // pgKv(pool) en la nube; las pruebas usan el doble en memor
 
 // Guardado con debounce para no escribir en cada tecla
 let saveTimer = null;
-function doSave() {
-  if (USE_DB) { kvStore.set(dbKeyFor(activeUserId), data).catch(e => console.error('Error al guardar en DB:', e.message)); return; }
+// Guardado pendiente: cuenta y snapshot fijados al pedir el guardado. Si otra cuenta pasa a ser la activa antes
+// de que venza el debounce, este guardado sigue en su propia cuenta y no se pierde.
+let pendingSave = null;
+function doSave(userId, snapshot) {
+  if (USE_DB) { kvStore.set(dbKeyFor(userId), snapshot).catch(e => console.error('Error al guardar en DB:', e.message)); return; }
   try {
-    saveUserData(DATA_DIR, activeUserId, data);
+    saveUserData(DATA_DIR, userId, snapshot);
   } catch (e) {
     console.error('Error al guardar:', e.message);
   }
@@ -178,14 +181,18 @@ function save() {
   const userId = activeUserId;
   const snapshot = data;
   USER_DATA.set(userId, snapshot);
-  saveTimer = setTimeout(() => {
-    if (USE_DB) { kvStore.set(dbKeyFor(userId), snapshot).catch(e => console.error('Error al guardar en DB:', e.message)); return; }
-    try { saveUserData(DATA_DIR, userId, snapshot); }
-    catch (e) { console.error('Error al guardar:', e.message); }
-  }, 150);
+  pendingSave = { userId, snapshot };
+  saveTimer = setTimeout(flushPending, 150);
+}
+function flushPending() {
+  clearTimeout(saveTimer);
+  if (!pendingSave) return;
+  const { userId, snapshot } = pendingSave;
+  pendingSave = null;
+  doSave(userId, snapshot);
 }
 // La app de escritorio lo usa al cerrar para no perder el último cambio. Inofensivo con `node server.js`.
-module.exports = { flush: () => { clearTimeout(saveTimer); doSave(); } };
+module.exports = { flush: flushPending };
 
 const uid = () => Math.random().toString(36).slice(2, 10) + Date.now().toString(36).slice(-4);
 
